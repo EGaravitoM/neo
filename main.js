@@ -305,6 +305,7 @@ const POCKET_STORE_URL = 'https://apps.apple.com/app/id6816721843';
 async function useCloudLibrary(win) {
   const cloud = pocketCloudLibrary();
   if (!cloud || path.resolve(cloud) === path.resolve(LIBRARY_DIR)) return false;
+  if (typeof notesRuntime !== 'undefined') await notesRuntime.flushAll();
   if (hasBooks(LIBRARY_DIR) && !(await moveLibraryAndClose(win, LIBRARY_DIR, cloud))) {
     app.relaunch(); // the window closed for the move: open again where the books still are
     app.exit(0);
@@ -450,6 +451,7 @@ async function chooseLibraryFolder() {
     if (r.response === 2) return;
     move = r.response === 0;
   }
+  if (typeof notesRuntime !== 'undefined') await notesRuntime.flushAll();
   if (move && !(await moveLibraryAndClose(win, LIBRARY_DIR, next))) {
     app.relaunch(); // the window closed for the move: open again where the books still are
     app.exit(0);
@@ -1227,6 +1229,7 @@ ipcMain.handle('book:delete', async (_e, bookId, title) => {
   });
   if (response === 1) {
     const { shell } = require('electron');
+    const resumeNotes = typeof notesRuntime !== 'undefined' ? await notesRuntime.flushAll() : () => {};
     try {
       await shell.trashItem(bookDir(bookId));
       return true;
@@ -1240,7 +1243,7 @@ ipcMain.handle('book:delete', async (_e, bookId, title) => {
         detail: t('The book is untouched. Its folder is highlighted so you can deal with it yourself.')
       });
       return false;
-    }
+    } finally { resumeNotes(); }
   }
   return false;
 });
@@ -2431,6 +2434,29 @@ function libraryPageTheme() {
 }
 
 // ---------------------------------------------------------------------------
+// Custom Notes remains gated to isolated, unpackaged integration-test profiles.
+// This gate is separate from Show More Features and is never a release toggle.
+const notesTestRoot = process.env && process.env.NEO_PLANET_NOTES_TEST_ROOT;
+let notesDevelopmentEnabled = false;
+if (!app.isPackaged && process.env && process.env.NEO_PLANET_NOTES_TEST === '1' && notesTestRoot) {
+  try {
+    const home = fs.realpathSync(notesTestRoot);
+    const temp = fs.realpathSync(os.tmpdir());
+    notesDevelopmentEnabled = home.startsWith(temp + path.sep) && fs.realpathSync(app.getPath('documents')) === home && path.resolve(app.getPath('userData')).startsWith(home + path.sep);
+  } catch { /* a missing isolated profile never enables the feature */ }
+}
+const notesRuntime = require('./planet-notes-runtime').createNotesRuntime({
+  app, ipcMain, enabled: notesDevelopmentEnabled, libraryRoot: () => LIBRARY_DIR, libName, logError,
+  availability: async (file) => {
+    if (isCloudOnly(file)) { requestDownload([file]); return 'unavailable'; }
+    try {
+      await fs.promises.lstat(path.join(path.dirname(file), '.' + path.basename(file) + '.icloud'));
+      requestDownload([file]); return 'unavailable';
+    } catch (err) { if (err.code !== 'ENOENT') throw err; }
+    return 'local';
+  }
+});
+
 function createWindow() {
   // the window comes back the size and place it was left, when that place
   // is still on a screen (a monitor unplugged since gets the default)
@@ -2470,6 +2496,7 @@ function createWindow() {
       spellcheck: true
     }
   });
+  notesRuntime.attach(win);
   if (process.platform === 'win32') {
     win.on('query-session-end', holdUpdateForShutdown);
     win.on('session-end', holdUpdateForShutdown);
@@ -3540,9 +3567,10 @@ ipcMain.handle('update:check', async () => {
   }
 });
 
-ipcMain.handle('update:install', () => {
+ipcMain.handle('update:install', async () => {
   const u = getUpdater();
   if (!u || !updaterReady) return false;
+  await notesRuntime.flushAll();
   setImmediate(() => u.quitAndInstall(false, true));
   return true;
 });

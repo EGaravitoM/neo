@@ -2511,6 +2511,7 @@ $('#author-chip').onclick = async () => {
 
 let openGeneration = 0;
 async function openBook(bookId) {
+  await leaveCustomNotes();
   // a book being exported from the shelf finishes first (it borrows the
   // open book's place for the moment it takes)
   while (shelfExport) await new Promise((r) => setTimeout(r, 50));
@@ -8141,6 +8142,153 @@ if (!NO_HOVER) {
 // right one shows what the manuscript already knows about the chapter on
 // the page: its outline note, its open placeholders, the darlings cut from
 // it. Only "Go to" there leaves the tab.
+// Custom Notes lifecycle is dormant in ordinary launches. Tree controls come in
+// Stage 4; file HTML stays locked until the Stage 3.2 inspector is present.
+let customNotesController = null;
+let customNotesSessionBook = null;
+let customNotesInspector = null;
+let customNotesComposing = false;
+let customNotesFrozen = false;
+let customNotesEditable = false;
+let customNotesLastInput = 0;
+let customNotesNoticeTimer = null;
+function customNotesNotice() {
+  clearTimeout(customNotesNoticeTimer);
+  const quiet = () => {
+    if (customNotesComposing || Date.now() - customNotesLastInput < 1600) { customNotesNoticeTimer = setTimeout(quiet, 1600); return; }
+    if (customNotesSessionBook) customNotesStatus(t('An external version was preserved as a conflict note.'));
+  };
+  customNotesNoticeTimer = setTimeout(quiet, 1600);
+}
+// Text offsets survive supported external paragraph changes where possible.
+function customNotesCaret(ed) {
+  const selection = window.getSelection();
+  if (!selection.rangeCount || !ed.contains(selection.anchorNode) || !ed.contains(selection.focusNode)) return () => {};
+  const offset = (node, at) => { const range = document.createRange(); range.selectNodeContents(ed); range.setEnd(node, at); return range.toString().length; };
+  const anchor = offset(selection.anchorNode, selection.anchorOffset); const focus = offset(selection.focusNode, selection.focusOffset);
+  return () => {
+    const point = (at) => {
+      const walker = document.createTreeWalker(ed, NodeFilter.SHOW_TEXT); let node; let last = null;
+      while ((node = walker.nextNode())) { last = node; if (at <= node.length) return [node, at]; at -= node.length; }
+      return last ? [last, last.length] : [ed, 0];
+    };
+    selection.setBaseAndExtent(...point(anchor), ...point(focus));
+  };
+}
+const customNotesError = (err) => window.neo.logError('custom notes: ' + (err && err.message || err));
+function customNotesStatus(text) {
+  let status = $('#custom-notes-status');
+  if (!status) {
+    status = document.createElement('p'); status.id = 'custom-notes-status';
+    status.setAttribute('role', 'status'); $('#aux-title').after(status);
+  }
+  status.textContent = text; status.hidden = !text;
+}
+async function prepareCustomNotes(inspector) {
+  const capabilities = window.neo.notesCapabilities ? await window.neo.notesCapabilities() : { enabled: false };
+  if (!capabilities.enabled || !book || !window.NeoPlanetNotesUI) throw new Error('Custom Notes is not enabled');
+  // Only the isolated unpackaged test profile can supply a trusted fixture
+  // inspector. Normal file rendering has no permissive fallback.
+  customNotesInspector = capabilities.fixtureInspection && typeof inspector === 'function' ? inspector : null;
+  if (!customNotesController) { customNotesController = window.NeoPlanetNotesUI.createNotesController({
+    api: window.neo, writingDay, makeOperationId: () => 'o-' + crypto.randomUUID(),
+    inspect: (html) => {
+      const inspectNow = customNotesInspector || (window.NeoPlanetNotesHtml && window.NeoPlanetNotesHtml.inspect);
+      return inspectNow ? inspectNow(html) : { status: 'unvalidated' };
+    },
+    view: {
+      capture: () => $('#aux-editor').innerHTML,
+      notice: customNotesNotice,
+      present: (state) => {
+        if (!book || state.document.bookId !== customNotesSessionBook || book.id !== customNotesSessionBook || currentTab !== 'notes') return;
+        const ed = $('#aux-editor');
+        ed.dataset.kind = ''; ed.dataset.book = ''; ed.dataset.customNoteId = state.document.noteId;
+        ed.dataset.customBookId = state.document.bookId;
+        customNotesEditable = !!state.editable;
+        ed.contentEditable = state.editable && !customNotesFrozen ? 'true' : 'false';
+        const html = state.editable ? state.html : '';
+        if (state.previewText !== undefined) ed.textContent = state.previewText;
+        else if (ed.innerHTML !== html) { const restore = customNotesCaret(ed); ed.innerHTML = html; restore(); }
+        let copy = $('#custom-notes-copy');
+        if (!copy) {
+          copy = document.createElement('button'); copy.id = 'custom-notes-copy'; copy.type = 'button';
+          copy.textContent = t('Create editable copy'); $('#aux-title').after(copy);
+          copy.addEventListener('click', () => customNotesController.createEditableCopy().catch(customNotesError));
+        }
+        copy.hidden = !state.canCopy;
+        ed.hidden = false; auxDirty = false;
+        $('#aux-title').textContent = state.title || t('Untitled');
+        if ($('#notes-outline')) $('#notes-outline').hidden = true;
+        if ($('#notes-up')) $('#notes-up').hidden = true;
+        if ($('#notes-side')) $('#notes-side').innerHTML = '';
+        const messages = { loading: t('Loading notes…'), missing: t('This note is missing from disk.'), unavailable: t('This note is not available on this device yet.'), unsupported: t('This HTML is read-only. Create an editable copy to simplify it.'), unvalidated: t('This note is waiting for HTML inspection.'), error: t('NEO couldn’t read this page from disk') };
+        customNotesStatus(state.editable ? '' : messages[state.status] || t('This note cannot be edited yet.'));
+      }
+    }
+  }); }
+  flushAux();
+  if (currentTab !== 'notes') switchTab('notes');
+  auxLoad++; // cancel an auxiliary-file read started by the legacy Notes tab
+  customNotesFrozen = false; customNotesSessionBook = book.id;
+  return customNotesController;
+}
+async function openCustomNote(noteId, inspector) {
+  const controller = await prepareCustomNotes(inspector);
+  await controller.open({ bookId: book.id, kind: 'custom', noteId });
+}
+async function createCustomNote(title = '', inspector) {
+  const controller = await prepareCustomNotes(inspector);
+  return controller.create(book.id, title);
+}
+async function leaveCustomNotes() {
+  if (!customNotesSessionBook) return;
+  await customNotesController.leave();
+  customNotesSessionBook = null; customNotesInspector = null; customNotesFrozen = false; customNotesEditable = false;
+  delete $('#aux-editor').dataset.customNoteId;
+  delete $('#aux-editor').dataset.customBookId;
+  customNotesStatus('');
+  if ($('#custom-notes-copy')) $('#custom-notes-copy').hidden = true;
+}
+// Domain entry points for the later Notes controls; backend capability checks
+// still apply, and ordinary launches cannot activate them.
+window.NeoCustomNotes = {
+  open: openCustomNote,
+  create: createCustomNote,
+  createEditableCopy: () => customNotesController.createEditableCopy(),
+  refresh: () => customNotesController ? customNotesController.refresh() : Promise.resolve(),
+  rename: async (title) => {
+    if (!customNotesSessionBook || !customNotesController) throw new Error('No custom note is open');
+    return customNotesController.rename(title);
+  }
+};
+if (window.neo.onNotesResume) { window.neo.onNotesResume(() => {
+  customNotesFrozen = false;
+  if ($('#aux-editor').dataset.customNoteId) $('#aux-editor').contentEditable = customNotesEditable ? 'true' : 'false';
+}); }
+if (window.neo.onNotesPrepareClose) { window.neo.onNotesPrepareClose(async (token) => {
+  try {
+    flushAllSaves();
+    if (customNotesController) await customNotesController.requestClose();
+    // Freeze only after draining, so newer edits made during the save are kept.
+    customNotesFrozen = true;
+    if ($('#aux-editor').dataset.customNoteId) $('#aux-editor').contentEditable = 'false';
+    window.neo.notesCloseResult({ token, status: 'ready' });
+  } catch (err) {
+    customNotesFrozen = false;
+    customNotesError(err);
+    customNotesStatus(t('Custom notes could not be saved. This window will stay open.'));
+    window.neo.notesCloseResult({ token, status: 'failed' });
+  }
+}); }
+
+async function refreshCustomNotes() {
+  if (!customNotesController || !customNotesSessionBook || customNotesFrozen || document.hidden || currentTab !== 'notes') return;
+  try { await customNotesController.refresh(); } catch (err) { customNotesError(err); }
+}
+window.addEventListener('focus', refreshCustomNotes);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshCustomNotes(); });
+setInterval(refreshCustomNotes, 5000);
+
 let notesPage = 'book';
 let notesPeeks = {}; // page → its text, for the left pane
 let notesPeeksBook = '';
@@ -8263,7 +8411,8 @@ function renderNotesNav() {
 // turn to another page without leaving the tab
 function openNotesPage(page) {
   if (!book || !notesPageOk(page)) page = 'book';
-  if (currentTab === 'notes' && page === notesPage) return;
+  if (customNotesSessionBook) return leaveCustomNotes().then(() => { notesPage = page; switchTab('notes'); });
+  if (currentTab === 'notes' && page === notesPage && !customNotesSessionBook) return;
   if (currentTab === 'notes') tabPlaces.notes = { scroll: $('#paper-scroll').scrollTop, page: notesPage };
   notesPage = page;
   if (currentTab === 'notes') switchTab('notes');
@@ -8328,9 +8477,8 @@ function copyToNotes(text) {
   const last = ed.lastElementChild;
   if (last && last.tagName === 'P' && !last.textContent.trim()) last.replaceWith(p);
   else ed.appendChild(p);
-  auxDirty = true;
-  scheduleAuxSave();
-  notesTyped();
+  if (ed.dataset.customNoteId && customNotesController) customNotesController.edit(ed.innerHTML);
+  else { auxDirty = true; scheduleAuxSave(); notesTyped(); }
   p.scrollIntoView({ behavior: scrollBehavior(), block: 'nearest' });
   toast(t('Added to the end of these notes'));
 }
@@ -8733,6 +8881,10 @@ let tabPlaces = {};
 
 let auxLoad = 0; // which Notes read is the current one
 function switchTab(name) {
+  if (customNotesSessionBook) {
+    if (name === 'notes' && currentTab === 'notes') { applyBright(); return; }
+    return leaveCustomNotes().then(() => switchTab(name));
+  }
   closeCardEditor();
   closeFootnote();
   auxLoad++;
@@ -11890,7 +12042,22 @@ window.addEventListener('resize', queueWalkNote);
 
 let auxDirty = false;
 $('#aux-editor').addEventListener('keydown', (e) => { if (styleKeepScroll(e)) return; smartKeys(e, e.currentTarget); });
+$('#aux-editor').addEventListener('compositionstart', () => {
+  if ($('#aux-editor').dataset.customNoteId && customNotesController) {
+    customNotesComposing = true; customNotesController.setComposing(true);
+  }
+});
+$('#aux-editor').addEventListener('compositionend', () => {
+  if (customNotesComposing && customNotesController) {
+    customNotesComposing = false; customNotesController.setComposing(false);
+  }
+});
 $('#aux-editor').addEventListener('input', () => {
+  if ($('#aux-editor').dataset.customNoteId) {
+    customNotesLastInput = Date.now();
+    if (customNotesController && !customNotesFrozen) customNotesController.edit($('#aux-editor').innerHTML);
+    return;
+  }
   auxDirty = true;
   scheduleAuxSave();
   notesTyped();
@@ -11918,6 +12085,10 @@ function scheduleAuxSave() {
 const auxPending = {};
 function flushAux() {
   const ed = $('#aux-editor');
+  if (ed.dataset.customNoteId && customNotesController) {
+    if (!customNotesComposing && !customNotesFrozen && ed.contentEditable === 'true') customNotesController.edit(ed.innerHTML);
+    customNotesController.flush().catch(customNotesError);
+  }
   if (auxDirty && ed.dataset.kind && ed.dataset.book) {
     const key = ed.dataset.book + '/' + ed.dataset.kind;
     auxPending[key] = { bookId: ed.dataset.book, kind: ed.dataset.kind, html: ed.innerHTML, inFlight: false };
@@ -12469,6 +12640,7 @@ async function saveMeta() {
 }
 
 function flushAllSaves(e) {
+  if (typeof customNotesController !== 'undefined' && customNotesController && customNotesController.hasPending()) customNotesController.flush().catch(customNotesError);
   if (!book || shelfExport) return;
   // remember where you were, for next session and for the other device:
   // the chapter, the paragraph and the letter (the same place on any
@@ -13394,9 +13566,10 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('beforeunload', flushAllSaves);
 // flush whenever focus leaves NEO, and every 20 seconds
 window.addEventListener('blur', () => { if (book) flushAllSaves(); });
-setInterval(() => { if (book) flushAllSaves('tick'); }, 20000);
+setInterval(() => { if (book || (customNotesController && customNotesController.hasPending())) flushAllSaves('tick'); }, 20000);
 
 async function backToShelf() {
+  await leaveCustomNotes();
   if (reading) stopReadAloud(false);
   flushAllSaves();
   tabPlaces = {};

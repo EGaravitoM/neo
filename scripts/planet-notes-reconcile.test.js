@@ -403,7 +403,7 @@ test('all shared modules load together and preserve conflicts in a browser envir
   const vm = require('node:vm'); const fs = require('node:fs'); const path = require('node:path');
   const { webcrypto } = require('node:crypto');
   const context = vm.createContext({ crypto: webcrypto, TextEncoder });
-  for (const file of ['planet-notes.js', 'planet-notes-history.js', 'planet-notes-reconcile.js', 'planet-notes-recovery.js', 'planet-notes-store.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context, { filename: file });
+  for (const file of ['i18n.js', 'planet-notes.js', 'planet-notes-history.js', 'planet-notes-reconcile.js', 'planet-notes-recovery.js', 'planet-notes-store.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context, { filename: file });
   const d = fixture(); d.files.set('n-mara.html', '<p>External writing</p>');
   const store = context.NeoPlanetNotesStore.createNotesStore(d.adapter);
   const result = await store.preserveBodyConflict(bodyConflict());

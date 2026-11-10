@@ -1,0 +1,120 @@
+'use strict';
+
+const { createHash } = require('node:crypto');
+const model = require('./planet-notes');
+const hash = (text) => createHash('sha256').update(text).digest('hex');
+const json = JSON.stringify;
+const fail = (code, message) => Object.assign(new Error(message), { code });
+const required = (r) => {
+  if (r.status !== 'ok') throw fail(r.status === 'unavailable' ? 'ECLOUD' : r.status === 'missing' ? 'ENOENT' : 'EINVAL', 'Notes observation: ' + r.status);
+  return r;
+};
+
+/** Runs inside the service's book queue. Observations are immutable evidence,
+ * not a second source of truth. Polls never rewrite unchanged canonical files. */
+function createNotesObserver({ adapter, store, makeId, now }) {
+  let localIndex = null;
+  const artifact = async (path, text) => {
+    const previous = await adapter.read(path);
+    if (previous.status === 'missing') await adapter.writeDurable(path, text);
+    else if (required(previous).text !== text) throw fail('ECONFLICT', 'Observation identity collision');
+    if (required(await adapter.read(path)).text !== text) throw fail('EIO', 'Observation verification failed');
+  };
+  const observe = (noteId, html) => artifact('recovery/observed-bodies/' + noteId + '/' + hash(html) + '.html', html);
+  const revision = async (noteId, html) => {
+    await observe(noteId, html);
+    const id = 'r-observed-' + hash(html);
+    const path = 'revisions/' + noteId + '/' + id;
+    const old = await adapter.read(path + '.json');
+    if (old.status === 'ok') {
+      let record;
+      try { record = JSON.parse(old.text); } catch { throw fail('EINVAL', 'Invalid observed revision'); }
+      if (model.validateRevision(record).status !== 'ok' || record.noteId !== noteId || record.bodyHash !== hash(html)) throw fail('EINVAL', 'Invalid observed revision');
+      await artifact(path + '.html', html); return;
+    }
+    if (old.status !== 'missing') required(old);
+    await artifact(path + '.html', html);
+    await artifact(path + '.json', json({ schemaVersion: 1, id, noteId, operationId: 'o-observed-' + hash(html), createdAt: now(), reason: 'external', writingDay: null, bodyHash: hash(html) }));
+  };
+  const remember = async () => {
+    const loaded = await store.load();
+    if (loaded.status === 'ok') {
+      await artifact('recovery/index-versions/' + loaded.index.versionId + '.json', json(loaded.index));
+      localIndex = loaded.index;
+    }
+    return loaded;
+  };
+  const ancestors = async (index) => {
+    const result = new Map(); const pending = [index];
+    while (pending.length) {
+      const current = pending.pop();
+      if (result.has(current.versionId)) continue;
+      result.set(current.versionId, current);
+      for (const id of current.parentVersionIds) {
+        const source = required(await adapter.read('recovery/index-versions/' + id + '.json'));
+        let parent;
+        try { parent = JSON.parse(source.text); } catch { throw fail('EINVAL', 'Invalid ancestry'); }
+        if (model.validateIndex(parent).status !== 'ok' || parent.versionId !== id) throw fail('EINVAL', 'Invalid ancestry');
+        pending.push(parent);
+      }
+    }
+    return result;
+  };
+  const metadata = async () => {
+    const incoming = await store.load();
+    if (incoming.status !== 'ok') return incoming;
+    if (!localIndex) return remember();
+    if (json(incoming.index) === json(localIndex)) return incoming;
+    if (incoming.index.versionId === localIndex.versionId) throw fail('EINVAL', 'Changed metadata reused a version identity');
+    await artifact('recovery/index-versions/' + incoming.index.versionId + '.json', json(incoming.index));
+    const left = await ancestors(localIndex); const right = await ancestors(incoming.index);
+    if (right.has(localIndex.versionId)) return remember();
+    const common = [...left.keys()].filter((id) => right.has(id));
+    let base = null;
+    for (const id of common) {
+      if (common.some((other) => other !== id && left.get(other).parentVersionIds.includes(id))) continue;
+      // Recovery validates that this is the newest proven common ancestor.
+      base = id; break;
+    }
+    if (!base) throw fail('ECONFLICT', 'Metadata has no proven merge base');
+    const result = await store.reconcileMetadata({ operationId: makeId('o'), versionId: makeId('v'), createdAt: now(), baseVersionId: base, localIndex, incomingIndex: incoming.index, expectedIndexToken: incoming.indexToken });
+    if (result.status !== 'saved') throw fail('EPENDING', 'Metadata changed during reconciliation');
+    return remember();
+  };
+  const refresh = async (noteId, { baseBodyToken, localHtml }) => {
+    await metadata();
+    let loaded = required(await store.load());
+    const orphans = await store.recoverOrphans({ operationId: makeId('o'), versionId: makeId('v'), createdAt: now(), expectedIndexToken: loaded.indexToken });
+    if (!['saved', 'unchanged'].includes(orphans.status)) return orphans;
+    if (orphans.status === 'saved') { await remember(); loaded = required(await store.load()); }
+    const note = loaded.index.notes.find((n) => n.id === noteId);
+    if (!note) {
+      const deletion = [...loaded.index.tombstones].reverse().find((t) => t.id === noteId);
+      if (deletion && localHtml !== baseBodyToken) {
+        const disk = await store.read(noteId);
+        if (disk.status === 'unavailable') return disk;
+        // Preserve the editor's words independently of a competing on-disk edit.
+        await observe(noteId, localHtml);
+        const result = await store.recoverEditedDeletion({ operationId: makeId('o'), versionId: makeId('v'), createdAt: now(), baseVersionId: loaded.index.versionId, noteId, trashId: deletion.trashId, incomingHtml: localHtml, fromEditor: true, expectedBodyToken: disk.status === 'missing' ? null : disk.bodyToken });
+        if (result.status !== 'saved') return result;
+        await remember();
+        return { status: 'recovered', noteId: result.recoveredNoteId, html: localHtml, bodyToken: localHtml };
+      }
+      return { status: 'missing' };
+    }
+    const disk = await store.read(noteId);
+    if (disk.status !== 'ok') return disk;
+    // Preserve both observed inputs before any canonical replacement or UI adopt.
+    await observe(noteId, baseBodyToken); await observe(noteId, disk.html);
+    if (disk.html === baseBodyToken) return { ...disk, title: note.title, changed: false };
+    await revision(noteId, baseBodyToken);
+    if (localHtml === baseBodyToken || localHtml === disk.html) return { ...disk, title: note.title, changed: true };
+    await observe(noteId, localHtml);
+    const result = await store.preserveBodyConflict({ operationId: makeId('o'), versionId: makeId('v'), createdAt: now(), baseVersionId: loaded.index.versionId, noteId, localHtml, incomingHtml: disk.html, expectedBodyToken: baseBodyToken });
+    if (result.status !== 'saved') return result;
+    await remember();
+    return { status: 'ok', html: localHtml, bodyToken: localHtml, title: note.title, changed: true, conflictNoteId: result.conflictNoteId };
+  };
+  return { observe, remember, metadata, refresh };
+}
+module.exports = { createNotesObserver };

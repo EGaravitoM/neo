@@ -2387,3 +2387,8 @@ html:lang(ko) :is(#aux-paper h2, .pen-slot, .shelf-label, .shelf-bound-mark, .pt
   .side-cards-title, .side-card-head, .notes-part, .ns-label, #notes-up, #notes-outline b) {
   letter-spacing: 0.04em;
 }
+
+/* Custom Notes recovery action follows the Notes hover/focus controls. */
+#custom-notes-copy { opacity: 0; }
+#aux-paper:hover #custom-notes-copy, #aux-paper:focus-within #custom-notes-copy { opacity: 1; }
+#aux-editor[contenteditable="false"][data-custom-note-id] { white-space: pre-wrap; }

@@ -1,7 +1,34 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
+// Typed envelopes preserve retry/conflict codes across Electron's IPC boundary.
+async function notesInvoke(channel, ...args) {
+  const result = await ipcRenderer.invoke('notes:' + channel, ...args);
+  // Errors thrown through contextBridge lose custom properties too. Return plain
+  // data here; the renderer controller constructs its own typed Error.
+  if (!result || !result.ok) return { status: 'error', error: { code: result?.error?.code || 'EIO', message: result?.error?.message || 'Notes request failed' } };
+  return result.value;
+}
+
 contextBridge.exposeInMainWorld('neo', {
   platform: process.platform,
+  notesCapabilities: () => notesInvoke('capabilities'),
+  notesLoad: (bookId) => notesInvoke('load', bookId),
+  notesRead: (bookId, noteId) => notesInvoke('read', bookId, noteId),
+  notesCreate: (bookId, request) => notesInvoke('create', bookId, request),
+  notesRename: (bookId, noteId, request) => notesInvoke('rename', bookId, noteId, request),
+  notesRefresh: (bookId, noteId, request) => notesInvoke('refresh', bookId, noteId, request),
+  notesCopy: (bookId, noteId, request) => notesInvoke('copy', bookId, noteId, request),
+  notesSave: (bookId, noteId, request) => notesInvoke('save', bookId, noteId, request),
+  onNotesPrepareClose: (callback) => {
+    const listener = (_event, token) => callback(token);
+    ipcRenderer.on('notes:prepareClose', listener);
+    return () => ipcRenderer.removeListener('notes:prepareClose', listener);
+  },
+  onNotesResume: (callback) => {
+    ipcRenderer.on('notes:resume', callback);
+    return () => ipcRenderer.removeListener('notes:resume', callback);
+  },
+  notesCloseResult: (result) => ipcRenderer.send('notes:closeResult', result),
   // macOS: the system dictionary panel for the selected word (#179)
   lookUpText: () => ipcRenderer.invoke('app:lookUp'),
 

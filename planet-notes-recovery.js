@@ -2,6 +2,7 @@
 
 (function () {
 const node = typeof module !== 'undefined' && module.exports;
+const { t } = node ? require('./i18n') : globalThis.NeoI18n;
 const model = node ? require('./planet-notes') : globalThis.NeoPlanetNotes;
 const merge = node ? require('./planet-notes-reconcile') : globalThis.NeoPlanetNotesReconcile;
 const digest = node ? require('./planet-notes-history').hash : globalThis.NeoPlanetNotesHistory.hash;
@@ -121,6 +122,7 @@ function createNotesRecovery({ adapter, load, read, ensure, replaceCanonical, ge
         if (kind === 'body' && (typeof r.localHtml !== 'string' || typeof r.expectedBodyToken !== 'string')) throw fail('EINVAL', 'Missing local writing');
         if (kind === 'edit-delete') {
           idCheck(r.trashId);
+          if (r.fromEditor !== undefined && typeof r.fromEditor !== 'boolean') throw fail('EINVAL', 'Invalid editor recovery source');
           if (r.expectedBodyToken !== undefined && r.expectedBodyToken !== null && typeof r.expectedBodyToken !== 'string') throw fail('EINVAL', 'Invalid deletion observation');
         }
       }
@@ -182,7 +184,7 @@ function createNotesRecovery({ adapter, load, read, ensure, replaceCanonical, ge
       if (disk.html !== r.incomingHtml) return { status: 'conflict' };
       if (r.incomingHtml === r.localHtml) return { status: 'saved', versionId: current.index.versionId, conflictNoteId: null };
       if (!plan.nextIndex.notes.some((n) => n.id === conflictNoteId) && !plan.nextIndex.tombstones.some((t) => t.id === conflictNoteId)) {
-        addNote(plan.nextIndex, { ...copy(source), id: conflictNoteId, createdAt: r.createdAt });
+        addNote(plan.nextIndex, { ...copy(source), title: t('{title} (conflict)', { title: source.title }), id: conflictNoteId, createdAt: r.createdAt });
         await addNewBody(plan, conflictNoteId, r.incomingHtml, old.status === 'ok');
       } else if (old.status !== 'ok') throw fail('ECONFLICT', 'Conflict note identity is occupied');
       plan.conflicts.push(old.status === 'ok' ? old.record : { schemaVersion: 1, id: conflictId, kind: 'body', operationId: r.operationId, createdAt: r.createdAt, sourceNoteId: r.noteId, recoveredNoteId: conflictNoteId, baseHtml: r.expectedBodyToken, localHtml: r.localHtml, incomingHtml: r.incomingHtml });
@@ -241,7 +243,7 @@ function createNotesRecovery({ adapter, load, read, ensure, replaceCanonical, ge
       if (trash.record.note.id !== r.noteId) throw fail('EINVAL', 'Mismatched deletion evidence');
       if (current.index.notes.some((n) => n.id === r.noteId)) return { status: 'conflict' };
       const disk = await read(r.noteId);
-      const inMemoryEdit = disk.status === 'missing' && r.expectedBodyToken === null;
+      const inMemoryEdit = r.fromEditor === true || (disk.status === 'missing' && r.expectedBodyToken === null);
       if (!inMemoryEdit) {
         required(disk);
         if (disk.html !== r.incomingHtml || r.expectedBodyToken === null || (typeof r.expectedBodyToken === 'string' && disk.html !== r.expectedBodyToken)) return { status: 'conflict' };

@@ -12,6 +12,8 @@
     "test:words": "electron scripts/words.e2e.js",
     "test:tabs": "electron scripts/tabs.e2e.js",
     "test:notes": "electron scripts/notes.e2e.js",
+    "test:custom-notes": "electron scripts/planet-notes-editor.e2e.js",
+    "test:custom-notes-disabled": "electron scripts/planet-notes-editor.e2e.js --disabled",
     "test:footnotes": "electron scripts/footnotes.e2e.js",
     "test:cover-text": "electron scripts/cover-text.e2e.js",
     "test:caret": "electron scripts/caret.e2e.js",
