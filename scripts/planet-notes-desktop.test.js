@@ -86,3 +86,45 @@ test('the persistence protocol creates and reopens a real book-local collection'
   assert.equal((await reopened.load()).index.notes[0].title, 'Native note');
   assert.equal((await reopened.read('n-native')).html, '<p>Words on disk.</p>');
 });
+
+test('native history saves, trashes and restores a note across reopened stores', async (t) => {
+  const { createNotesStore } = require('../planet-notes-store');
+  const { adapter } = await fixture(t);
+  const at = '2026-11-10T10:00:00.000Z';
+  const store = createNotesStore(adapter);
+  await store.apply({
+    operationId: 'o-create', baseVersionId: null,
+    nextIndex: { schemaVersion: 1, versionId: 'v-create', parentVersionIds: [], root: { sortMode: 'alphabetical', childOrder: ['n-mara'] }, groups: [], labels: [], tombstones: [], notes: [{ id: 'n-mara', title: 'Mara', parentId: null, labelIds: [], createdAt: at }] },
+    bodies: [{ noteId: 'n-mara', html: '<p>Original</p>', expectedBodyToken: null }]
+  });
+  await store.saveNote({ operationId: 'o-save', noteId: 'n-mara', expectedBodyToken: '<p>Original</p>', html: '<p>Updated</p>', reason: 'daily', writingDay: '2026-11-10', createdAt: at, baseVersionId: 'v-create', versionId: 'v-save' });
+  await createNotesStore(adapter).trashNote({ operationId: 'o-trash', trashId: 't-mara', noteId: 'n-mara', expectedBodyToken: '<p>Updated</p>', baseVersionId: 'v-save', versionId: 'v-trash', createdAt: at });
+  const reopened = createNotesStore(adapter);
+  await reopened.recover();
+  await reopened.restoreTrash({ operationId: 'o-restore', trashId: 't-mara', baseVersionId: 'v-trash', versionId: 'v-restore', createdAt: at });
+  assert.equal((await reopened.read('n-mara')).html, '<p>Updated</p>');
+  const revision = (await reopened.listRevisions('n-mara'))[0];
+  assert.equal((await reopened.readRevision('n-mara', revision.id)).html, '<p>Original</p>');
+  assert.equal((await reopened.readTrash('t-mara')).html, '<p>Updated</p>');
+});
+
+test('native conflict preservation and orphan recovery persist across reopening', async (t) => {
+  const { createNotesStore } = require('../planet-notes-store');
+  const { adapter } = await fixture(t);
+  const at = '2026-11-10T10:00:00.000Z';
+  const store = createNotesStore(adapter);
+  await store.apply({ operationId: 'o-create', baseVersionId: null,
+    nextIndex: { schemaVersion: 1, versionId: 'v-create', parentVersionIds: [], root: { sortMode: 'manual', childOrder: ['n-mara'] }, groups: [], labels: [], tombstones: [], notes: [{ id: 'n-mara', title: 'Mara', parentId: null, labelIds: [], createdAt: at }] },
+    bodies: [{ noteId: 'n-mara', html: '<p>Base</p>', expectedBodyToken: null }]
+  });
+  await adapter.writeDurable('n-mara.html', '<p>External</p>');
+  const result = await store.preserveBodyConflict({ operationId: 'o-conflict', noteId: 'n-mara', expectedBodyToken: '<p>Base</p>', localHtml: '<p>Local</p>', incomingHtml: '<p>External</p>', baseVersionId: 'v-create', versionId: 'v-conflict', createdAt: at });
+  await adapter.writeDurable('Lighthouse.html', '<p>Research</p>');
+  const discovery = await store.recoverOrphans({ operationId: 'o-orphans', expectedIndexToken: (await store.load()).indexToken, versionId: 'v-orphans', createdAt: at });
+  const reopened = createNotesStore(adapter);
+  await reopened.recover();
+  assert.equal((await reopened.read('n-mara')).html, '<p>Local</p>');
+  assert.equal((await reopened.read(result.conflictNoteId)).html, '<p>External</p>');
+  assert.equal((await reopened.read(discovery.recoveredNoteIds[0])).html, '<p>Research</p>');
+  assert.equal((await reopened.listConflicts()).length, 1);
+});

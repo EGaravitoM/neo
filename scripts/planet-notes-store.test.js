@@ -242,3 +242,18 @@ for (const unavailable of [false, true]) {
     assert.equal(d.files.get('n-mara.html'), '<p>Original</p>');
   });
 }
+
+test('history writes settle a published core operation whose receipt failed', async () => {
+  const d = disk(); const write = d.adapter.writeDurable;
+  let once = true;
+  d.adapter.writeDurable = async (name, text) => {
+    if (once && name === 'recovery/receipts/o-create.json') { once = false; throw Object.assign(new Error('receipt failed'), { code: 'EIO' }); }
+    return write(name, text);
+  };
+  const store = createNotesStore(d.adapter);
+  await assert.rejects(store.apply(creation()), { code: 'EIO' });
+  await store.saveNote({ operationId: 'o-save', noteId: 'n-mara', expectedBodyToken: '<p>Mara kept the letter.</p>', html: '<p>Later writing</p>', baseVersionId: 'v-created', versionId: 'v-later', reason: 'daily', writingDay: '2026-11-10', createdAt: '2026-11-10T10:00:00.000Z' });
+  assert.ok(d.files.has('recovery/receipts/o-create.json'));
+  assert.ok((await store.recover()).every((result) => result.status === 'saved'));
+  assert.equal((await store.read('n-mara')).html, '<p>Later writing</p>');
+});

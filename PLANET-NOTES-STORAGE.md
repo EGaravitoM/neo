@@ -62,7 +62,7 @@ Expected: passing behavioral tests. Native adapter tests also live in
 `scripts/planet-notes-desktop.test.js` and are included by the ordinary test glob.
 
 Task 2.1 includes native adapter checks for partial writes, fsync/rename errors,
-cloud refusal and containment. Revisions/trash execution, distributed reconciliation,
+cloud refusal and containment. Tasks 2.2 and 2.3 add history, trash, reconciliation and orphan recovery separately.
 HTML safety inspection and runtime bridge integration remain later tasks.
 
 
@@ -74,10 +74,10 @@ HTML safety inspection and runtime bridge integration remain later tasks.
   identify retries exactly, even after later versions publish.
 - Body tokens are exact source strings, not shortened fingerprints. They are not
   persisted as editable metadata or used to claim distributed atomicity.
-- Tombstones remain empty-only until their schema and semantics are implemented
-  in Tasks 2.2/2.3. Removal through the core persistence request is refused.
-- Recovery refuses observed conflicts and retains intents. Creating conflict notes,
-  metadata merging and orphan discovery belong to Task 2.3.
+- Task 2.2 adds validated deletion tombstones and dedicated trash operations.
+  Removal through the raw core persistence request remains refused.
+- Core writes refuse observed conflicts and retain intents. Task 2.3 adds explicit
+  conflict preservation, metadata merging and orphan-discovery commands.
 - Desktop adapter requires an injected cloud guard, uses asynchronous I/O and
   unique temporary files, and has no destructive write fallback. Directory fsync
   is used on non-Windows systems; native Windows directory durability is limited.
@@ -99,3 +99,20 @@ HTML safety inspection and runtime bridge integration remain later tasks.
   Post-write reference checks still protect publication if availability changes.
 - Model/store declarations are scoped independently so classic browser loading
   does not collide. A browser-context regression exercises both exported modules.
+
+
+## Published receipt completion
+
+Before a new core/history/reconciliation write advances the index, the shared
+store attempts to finish interrupted operations targeting its CURRENT published
+version. Internal recovery bypasses this entry guard, avoiding queue re-entry.
+A transient final-receipt failure is therefore settled while its exact output is
+still verifiable; a later save cannot strand that operation behind a newer index.
+
+Persistent I/O errors propagate before the later write begins. An observed
+conflict/invalid published operation rejects the later write with EPENDING and
+preserves its evidence; unavailable required evidence rejects with ECLOUD. Callers
+must retain pending editor text rather than treat these errors as successful saves.
+This guard does not guess completion of historical ancestors that had already
+advanced before the guard existed. Such ambiguous operations remain explicit
+recovery cases. No revision or transaction-record retention policy was changed.

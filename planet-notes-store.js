@@ -115,23 +115,102 @@ function createNotesStore(adapter) {
     await ensure(receiptPath, encoded, true);
     return { status: 'saved', versionId: request.nextIndex.versionId };
   };
-  const recover = async () => {
-    const results = [];
+  const recoverBase = async (publishedVersion = null) => {
+    const results = await history.recover(publishedVersion);
     for (const path of (await adapter.list()).filter((p) => /^recovery\/operations\/[a-z][a-z0-9]*-[A-Za-z0-9-]+\.json$/.test(p)).sort()) {
       const record = await adapter.read(path);
       if (record.status !== 'ok') { results.push({ path, status: record.status }); continue; }
       let request;
-      try { request = JSON.parse(record.text); validateRequest(request); } catch { results.push({ path, status: 'invalid' }); continue; }
+      try { request = JSON.parse(record.text); } catch {
+        if (publishedVersion === null) results.push({ path, status: 'invalid' });
+        continue;
+      }
+      if (publishedVersion !== null && request?.nextIndex?.versionId !== publishedVersion) continue;
+      try { validateRequest(request); } catch { results.push({ path, status: 'invalid' }); continue; }
       if (path !== 'recovery/operations/' + request.operationId + '.json') { results.push({ path, status: 'invalid' }); continue; }
       results.push({ path, ...await execute(request, true) });
     }
     return results;
   };
-  return { load: () => serial(load), read: (id) => serial(() => read(id)), apply: (r) => {
+  // Lazy loading keeps Task 2.1 browser users working without history loaded.
+  let historyModule;
+  const history = {};
+  const getHistory = () => {
+    if (!historyModule) {
+      const api = typeof module !== 'undefined' && module.exports ? require('./planet-notes-history') : globalThis.NeoPlanetNotesHistory;
+      if (!api) throw error('EINVAL', 'History module is not loaded');
+      historyModule = api.createNotesHistory({ adapter, load, read, ensure, replaceCanonical, beforeWrite: settlePublished });
+    }
+    return historyModule;
+  };
+  history.recover = async (publishedVersion = null) => {
+    // No history module is needed when no history operations have been persisted.
+    if (!(await adapter.list()).some((p) => p.startsWith('recovery/history-operations/'))) return [];
+    return getHistory().recover(publishedVersion);
+  };
+  const command = (name, r) => {
+    let copy;
+    try { copy = JSON.parse(JSON.stringify(r)); } catch { return Promise.reject(error('EINVAL', 'Invalid history request')); }
+    return serial(() => getHistory()[name](copy));
+  };
+  let recoveryModule;
+  const getRecovery = () => {
+    if (!recoveryModule) {
+      const api = typeof module !== 'undefined' && module.exports ? require('./planet-notes-recovery') : globalThis.NeoPlanetNotesRecovery;
+      if (!api) throw error('EINVAL', 'Recovery module is not loaded');
+      recoveryModule = api.createNotesRecovery({ adapter, load, read, ensure, replaceCanonical, getHistory, beforeWrite: settlePublished, recoverPending: async () => [...await recoverBase(), ...await getRecovery().recover()] });
+    }
+    return recoveryModule;
+  };
+  const recoveryCommand = (name, r) => {
+    let request;
+    try { request = JSON.parse(JSON.stringify(r)); } catch { return Promise.reject(error('EINVAL', 'Invalid reconciliation request')); }
+    return serial(() => getRecovery()[name](request));
+  };
+  const recover = async () => {
+    const results = await recoverBase();
+    if ((await adapter.list()).some((p) => p.startsWith('recovery/reconcile-operations/'))) results.push(...await getRecovery().recover());
+    return results;
+  };
+  // A published operation may have failed only its final receipt. Finish it
+  // while its exact version is still current, before any later write advances it.
+  // Module recovery is unqueued/internal, so this never re-enters the public queue.
+  const settlePublished = async () => {
+    const current = await load();
+    if (current.status === 'missing') return;
+    if (current.status !== 'ok') throw error(current.status === 'unavailable' ? 'ECLOUD' : 'EINVAL', 'Cannot settle the current notes version');
+    const results = await recoverBase(current.index.versionId);
+    if ((await adapter.list()).some((path) => path.startsWith('recovery/reconcile-operations/'))) results.push(...await getRecovery().recover(current.index.versionId));
+    if (results.some((result) => result.status !== 'saved')) {
+      const failure = error(results.some((result) => result.status === 'unavailable') ? 'ECLOUD' : 'EPENDING', 'A published notes operation must finish before another write');
+      failure.pending = results.filter((result) => result.status !== 'saved');
+      throw failure;
+    }
+  };
+  return {
+    preserveBodyConflict: (r) => recoveryCommand('preserveBodyConflict', r),
+    reconcileMetadata: (r) => recoveryCommand('reconcileMetadata', r),
+    recoverEditedDeletion: (r) => recoveryCommand('recoverEditedDeletion', r),
+    recoverOrphans: (r) => recoveryCommand('recoverOrphans', r),
+    listConflicts: () => serial(() => getRecovery().listConflicts()),
+    readConflict: (id) => serial(() => getRecovery().readConflict(id)),
+    saveNote: (r) => command('saveNote', r),
+    listRevisions: (noteId) => serial(() => getHistory().listRevisions(noteId)),
+    readRevision: (noteId, revisionId) => serial(() => getHistory().readRevision(noteId, revisionId)),
+    trashNote: (r) => command('trashNote', r),
+    listTrash: () => serial(() => getHistory().listTrash()),
+    readTrash: (trashId) => serial(() => getHistory().readTrash(trashId)),
+    restoreTrash: (r) => command('restoreTrash', r),
+    restoreRevision: (r) => command('restoreRevision', r),
+    load: () => serial(load), read: (id) => serial(() => read(id)), apply: (r) => {
     // Snapshot caller-owned input before the asynchronous queue runs.
     let copy;
     try { copy = JSON.parse(JSON.stringify(r)); } catch { return Promise.reject(error('EINVAL', 'Invalid request')); }
-    return serial(() => execute(copy));
+    return serial(async () => {
+      validateRequest(copy);
+      await settlePublished();
+      return execute(copy);
+    });
   }, recover: () => serial(recover) };
 }
 const api = { createNotesStore };
