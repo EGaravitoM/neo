@@ -176,6 +176,10 @@ function createNotesController({ api, view, inspect, writingDay, makeOperationId
   };
   return {
     open, leave, edit, flush, requestClose, create, rename, hasPending,
+    updateTitle(bookId, noteId, title) {
+      const entry = entries.get(key({ bookId, noteId }));
+      if (entry) { entry.title = title; if (active === entry && !composing) { capture(); show(entry); } }
+    },
     async createEditableCopy() {
       live();
       if (!preview || typeof preview.checked?.copyHtml !== 'string') throw fail('EINVAL', 'No unsupported note is open');

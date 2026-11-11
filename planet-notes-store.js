@@ -15,6 +15,11 @@ function createNotesStore(adapter) {
     queues.set(adapter, task);
     return task;
   };
+  const snapshotCommand = (command, request) => {
+    let snapshot;
+    try { snapshot = JSON.parse(JSON.stringify(request)); } catch { return Promise.reject(error('EINVAL', 'Invalid request')); }
+    return serial(() => command(snapshot));
+  };
   const idCheck = (id) => { if (!model.safeId(id)) throw error('EINVAL', 'Invalid ID'); };
   // Exact source token, not a short collision-prone hash. Kept internal/in memory.
   const token = (text) => text;
@@ -61,6 +66,14 @@ function createNotesStore(adapter) {
     const intentPath = 'recovery/operations/' + request.operationId + '.json';
     const receiptPath = 'recovery/receipts/' + request.operationId + '.json';
     const encoded = JSON.stringify(request);
+    const abandoned = await adapter.read('recovery/abandoned-metadata/' + request.operationId + '.json');
+    if (abandoned.status === 'unavailable') throw error('ECLOUD', 'Organization conflict evidence unavailable');
+    if (abandoned.status === 'ok') {
+      let record;
+      try { record = JSON.parse(abandoned.text); } catch { throw error('EINVAL', 'Invalid organization conflict evidence'); }
+      if (JSON.stringify(record.request) !== encoded || model.validateIndex(record.index).status !== 'ok') throw error('EINVAL', 'Organization conflict identity reused');
+      return { status: 'conflict-preserved' };
+    }
     const receipt = await adapter.read(receiptPath);
     if (receipt.status === 'unavailable') throw error('ECLOUD', 'Receipt unavailable');
     if (receipt.status === 'ok') {
@@ -181,13 +194,91 @@ function createNotesStore(adapter) {
     if (current.status !== 'ok') throw error(current.status === 'unavailable' ? 'ECLOUD' : 'EINVAL', 'Cannot settle the current notes version');
     const results = await recoverBase(current.index.versionId);
     if ((await adapter.list()).some((path) => path.startsWith('recovery/reconcile-operations/'))) results.push(...await getRecovery().recover(current.index.versionId));
-    if (results.some((result) => result.status !== 'saved')) {
+    if (results.some((result) => !['saved', 'conflict-preserved'].includes(result.status))) {
       const failure = error(results.some((result) => result.status === 'unavailable') ? 'ECLOUD' : 'EPENDING', 'A published notes operation must finish before another write');
       failure.pending = results.filter((result) => result.status !== 'saved');
       throw failure;
     }
   };
+  const abandonMetadata = async (request) => {
+    validateRequest(request);
+    if (request.bodies.length) throw error('EINVAL', 'Body writes cannot be retired as metadata');
+    const receipt = await adapter.read('recovery/receipts/' + request.operationId + '.json');
+    if (receipt.status === 'unavailable') throw error('ECLOUD', 'Metadata receipt unavailable');
+    if (receipt.status === 'ok') {
+      if (receipt.text !== JSON.stringify(request)) throw error('EINVAL', 'Metadata operation identity reused');
+      return { status: 'saved', versionId: request.nextIndex.versionId };
+    }
+    if (request.baseVersionId === null) {
+      if (request.nextIndex.notes.length) throw error('EINVAL', 'Initial writing cannot be retired as metadata');
+    } else {
+      const base = await loadArchivedIndex(request.baseVersionId);
+      if (base.notes.length !== request.nextIndex.notes.length || base.notes.some((n) => !request.nextIndex.notes.some((next) => next.id === n.id))) throw error('EINVAL', 'Retired metadata cannot create or delete writing');
+    }
+    const current = await load();
+    if (current.status !== 'ok') throw error(current.status === 'unavailable' ? 'ECLOUD' : current.status === 'missing' ? 'ENOENT' : 'EINVAL', 'Current metadata unavailable');
+    if (current.index.versionId === request.nextIndex.versionId) throw error('EPENDING', 'Published metadata cannot be retired');
+    const path = 'recovery/abandoned-metadata/' + request.operationId + '.json';
+    const previous = await adapter.read(path);
+    if (previous.status === 'missing') await ensure(path, JSON.stringify({ request, index: current.index }), true);
+    else {
+      if (previous.status !== 'ok') throw error('ECLOUD', 'Metadata conflict evidence unavailable');
+      let record;
+      try { record = JSON.parse(previous.text); } catch { throw error('EINVAL', 'Invalid metadata conflict evidence'); }
+      if (JSON.stringify(record.request) !== JSON.stringify(request) || model.validateIndex(record.index).status !== 'ok') throw error('EINVAL', 'Metadata conflict identity reused');
+    }
+    return { status: 'conflict-preserved' };
+  };
+  const loadArchivedIndex = async (id) => {
+    const source = await adapter.read('recovery/index-versions/' + id + '.json');
+    if (source.status !== 'ok') throw error(source.status === 'unavailable' ? 'ECLOUD' : 'ENOENT', 'Metadata base unavailable');
+    let index;
+    try { index = JSON.parse(source.text); } catch { throw error('EINVAL', 'Invalid metadata base'); }
+    if (model.validateIndex(index).status !== 'ok' || index.versionId !== id) throw error('EINVAL', 'Invalid metadata base');
+    return index;
+  };
+  // A metadata-only command can be represented by a later reconciled index
+  // without ever publishing its intermediate index. Prove ancestry and preserve
+  // its exact snapshot before issuing its original idempotence receipt.
+  const acknowledgeMergedMetadata = async (request) => {
+    validateRequest(request);
+    if (request.bodies.length || request.baseVersionId === null) return { status: 'conflict' };
+    const current = await load();
+    if (current.status !== 'ok') return current;
+    const pending = [current.index]; const visited = new Set(); let represented = false;
+    while (pending.length) {
+      const index = pending.pop();
+      if (visited.has(index.versionId)) continue;
+      visited.add(index.versionId);
+      if (index.versionId === request.nextIndex.versionId) {
+        if (JSON.stringify(index) !== JSON.stringify(request.nextIndex)) throw error('EINVAL', 'Merged command identity collision');
+        represented = true; break;
+      }
+      for (const id of index.parentVersionIds) {
+        const source = await adapter.read('recovery/index-versions/' + id + '.json');
+        if (source.status !== 'ok') continue;
+        let archived;
+        try { archived = JSON.parse(source.text); } catch { throw error('EINVAL', 'Invalid merge ancestry'); }
+        if (model.validateIndex(archived).status !== 'ok' || archived.versionId !== id) throw error('EINVAL', 'Invalid merge ancestry');
+        pending.push(archived);
+      }
+    }
+    if (!represented) return { status: 'conflict' };
+    const base = await adapter.read('recovery/index-versions/' + request.baseVersionId + '.json');
+    if (base.status !== 'ok') return { status: 'conflict' };
+    let original;
+    try { original = JSON.parse(base.text); } catch { throw error('EINVAL', 'Invalid metadata base'); }
+    if (model.validateIndex(original).status !== 'ok' || original.notes.length !== request.nextIndex.notes.length || original.notes.some((n) => !request.nextIndex.notes.some((next) => next.id === n.id))) throw error('EINVAL', 'Merged acknowledgment cannot create or delete writing');
+    await ensure('recovery/index-versions/' + request.nextIndex.versionId + '.json', JSON.stringify(request.nextIndex), true);
+    await ensure('recovery/receipts/' + request.operationId + '.json', JSON.stringify(request), true);
+    return { status: 'saved', versionId: request.nextIndex.versionId };
+  };
   return {
+    abandonInitialMetadata: (r) => snapshotCommand((copy) => { if (copy.baseVersionId !== null) throw error('EINVAL', 'Expected initial metadata'); return abandonMetadata(copy); }, r),
+    abandonMetadata: (r) => snapshotCommand(abandonMetadata, r),
+    abandonMetadataResolution: (r) => snapshotCommand((copy) => getRecovery().abandonMetadata(copy), r),
+    abandonOrganizationHistory: (kind, r) => snapshotCommand((copy) => getHistory().abandonOrganization(kind, copy), r),
+    acknowledgeMergedMetadata: (r) => snapshotCommand(acknowledgeMergedMetadata, r),
     preserveBodyConflict: (r) => recoveryCommand('preserveBodyConflict', r),
     reconcileMetadata: (r) => recoveryCommand('reconcileMetadata', r),
     recoverEditedDeletion: (r) => recoveryCommand('recoverEditedDeletion', r),

@@ -12,6 +12,9 @@ async function notesInvoke(channel, ...args) {
 contextBridge.exposeInMainWorld('neo', {
   platform: process.platform,
   notesCapabilities: () => notesInvoke('capabilities'),
+  notesOrganize: (bookId, request) => notesInvoke('organize', bookId, request),
+  notesUndoOrganization: (bookId, request) => notesInvoke('undoOrganization', bookId, request),
+  notesOrganizationState: (bookId) => notesInvoke('organizationState', bookId),
   notesLoad: (bookId) => notesInvoke('load', bookId),
   notesRead: (bookId, noteId) => notesInvoke('read', bookId, noteId),
   notesCreate: (bookId, request) => notesInvoke('create', bookId, request),

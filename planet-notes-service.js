@@ -2,7 +2,9 @@
 
 const { randomUUID, createHash } = require('node:crypto');
 const model = require('./planet-notes');
-const { t } = require('./i18n');
+const { t, getLocale } = require('./i18n');
+const { validateAction } = require('./planet-notes-organization');
+const { createOrganizationService } = require('./planet-notes-organization-service');
 const { createNotesObserver } = require('./planet-notes-observer');
 const fail = (code, message) => Object.assign(new Error(message), { code });
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -132,6 +134,12 @@ function createNotesService({ getBook, enabled = false, makeId = (prefix) => pre
     }
   };
   const observer = (ctx) => ctx.observer || (ctx.observer = createNotesObserver({ ...ctx, makeId: freshId, now }));
+  const organizations = new WeakMap();
+  const organization = (ctx) => {
+    if (!organizations.has(ctx)) organizations.set(ctx, createOrganizationService({ ...ctx, makeId: freshId, now, remember: () => observer(ctx).remember(), locale: getLocale }));
+    return organizations.get(ctx);
+  };
+  const settleAll = async (ctx) => { await settle(ctx); await organization(ctx).settle(); };
   const command = async (kind, bookId, noteId, request) => {
     active(); bookIdentity(bookId); if (noteId !== null) id(noteId);
     const normalized = normalize(kind, request);
@@ -146,7 +154,7 @@ function createNotesService({ getBook, enabled = false, makeId = (prefix) => pre
         validatePrepared(record, semantic);
         return execute(ctx, record);
       }
-      await settle(ctx);
+      await settleAll(ctx);
       await observer(ctx).metadata();
       const loaded = await ctx.store.load();
       if (loaded.status !== 'ok' && !(kind === 'create' && loaded.status === 'missing')) required(loaded);
@@ -212,11 +220,11 @@ function createNotesService({ getBook, enabled = false, makeId = (prefix) => pre
   };
   return {
     capabilities: async () => ({ enabled: !!enabled }),
-    load: async (bookId) => { bookIdentity(bookId); return enabled ? serial(bookId, async (ctx) => { await settle(ctx); return observer(ctx).metadata(); }) : { status: 'disabled' }; },
+    load: async (bookId) => { bookIdentity(bookId); return enabled ? serial(bookId, async (ctx) => { await settleAll(ctx); return observer(ctx).metadata(); }) : { status: 'disabled' }; },
     read: async (bookId, noteId) => {
       active(); bookIdentity(bookId); id(noteId);
       return serial(bookId, async (ctx) => {
-        await settle(ctx); await observer(ctx).metadata();
+        await settleAll(ctx); await observer(ctx).metadata();
         const loaded = await ctx.store.load(); if (loaded.status !== 'ok') return loaded;
         const note = loaded.index.notes.find((n) => n.id === noteId); if (!note) return { status: 'missing' };
         const body = await ctx.store.read(noteId);
@@ -227,9 +235,24 @@ function createNotesService({ getBook, enabled = false, makeId = (prefix) => pre
     refresh: (bookId, noteId, request) => {
       active(); bookIdentity(bookId); id(noteId);
       if (!request || Object.keys(request).some((k) => !['baseBodyToken', 'localHtml'].includes(k)) || typeof request.baseBodyToken !== 'string' || typeof request.localHtml !== 'string') throw fail('EINVAL', 'Invalid refresh request');
-      return serial(bookId, async (ctx) => { await settle(ctx); return observer(ctx).refresh(noteId, request); });
+      return serial(bookId, async (ctx) => { await settleAll(ctx); return observer(ctx).refresh(noteId, request); });
     },
     copy: (bookId, noteId, request) => command('copy', bookId, noteId, request),
+    organize: async (bookId, request, session = 'default') => {
+      active(); bookIdentity(bookId);
+      const normalized = validateAction(request);
+      return serial(bookId, async (ctx) => { await settleAll(ctx); await observer(ctx).metadata(); return organization(ctx).organize(normalized, session); });
+    },
+    undoOrganization: async (bookId, request, session = 'default') => {
+      active(); bookIdentity(bookId);
+      if (!request || !model.safeId(request.operationId) || Object.keys(request).some((key) => key !== 'operationId')) throw fail('EINVAL', 'Invalid organization undo');
+      const normalized = { operationId: request.operationId };
+      return serial(bookId, async (ctx) => { await settleAll(ctx); await observer(ctx).metadata(); return organization(ctx).undo(normalized, session); });
+    },
+    organizationState: async (bookId, session = 'default') => {
+      active(); bookIdentity(bookId);
+      return serial(bookId, async (ctx) => ({ canUndo: organization(ctx).canUndo(session) }));
+    },
     create: (bookId, request) => command('create', bookId, null, request),
     rename: (bookId, noteId, request) => command('rename', bookId, noteId, request),
     save: (bookId, noteId, request) => command('save', bookId, noteId, request)

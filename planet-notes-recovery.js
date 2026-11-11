@@ -82,7 +82,7 @@ function createNotesRecovery({ adapter, load, read, ensure, replaceCanonical, ge
     if (found) return found.id;
     const id = 'g-' + (await digest('planet-notes:recovered-group')).slice(0, 40);
     if ([...index.groups, ...index.notes, ...index.labels].some((item) => item.id === id)) throw fail('ECONFLICT', 'Recovered group identity is occupied');
-    index.groups.push({ id, title: 'Recovered Notes', parentId: null, sortMode: 'alphabetical', childOrder: [], createdAt: at, systemRole: 'recovered' });
+    index.groups.push({ id, title: t('Recovered Notes'), parentId: null, sortMode: 'alphabetical', childOrder: [], createdAt: at, systemRole: 'recovered' });
     index.root.childOrder.push(id);
     return id;
   };
@@ -419,6 +419,14 @@ function createNotesRecovery({ adapter, load, read, ensure, replaceCanonical, ge
       if (saved.kind !== kind || json(saved.request) !== json(r) || !saved.result || saved.result.status !== 'saved' || saved.result.versionId !== r.versionId) throw fail('EINVAL', 'Operation ID reused or receipt invalid');
       return saved.result;
     }
+    const abandoned = await adapter.read('recovery/abandoned-reconciliations/' + r.operationId + '.json');
+    if (abandoned.status === 'unavailable') throw fail('ECLOUD', 'Reconciliation conflict evidence unavailable');
+    if (abandoned.status === 'ok') {
+      let record;
+      try { record = JSON.parse(abandoned.text); } catch { throw fail('EINVAL', 'Invalid reconciliation conflict evidence'); }
+      if (kind !== 'metadata' || record.kind !== kind || json(record.request) !== json(r) || model.validateIndex(record.index).status !== 'ok') throw fail('EINVAL', 'Reconciliation conflict identity reused');
+      return { status: 'conflict-preserved' };
+    }
     const pending = await adapter.read(path.intent);
     if (pending.status === 'unavailable') throw fail('ECLOUD', 'Reconciliation intent unavailable');
     if (pending.status === 'ok') {
@@ -432,7 +440,7 @@ function createNotesRecovery({ adapter, load, read, ensure, replaceCanonical, ge
         if (!['ECLOUD', 'EINVAL', 'ENOENT', 'ECONFLICT'].includes(err.code)) throw err;
         return { status: 'deferred', recoveredNoteIds: [], unavailableNoteIds: [] };
       }
-      if (recovered.some((entry) => !['saved', 'unchanged'].includes(entry.status))) return { status: 'deferred', recoveredNoteIds: [], unavailableNoteIds: [] };
+      if (recovered.some((entry) => !['saved', 'unchanged', 'conflict-preserved'].includes(entry.status))) return { status: 'deferred', recoveredNoteIds: [], unavailableNoteIds: [] };
     }
     const plan = await build(kind, r);
     return plan.status ? plan : commit(plan, false);
@@ -453,7 +461,21 @@ function createNotesRecovery({ adapter, load, read, ensure, replaceCanonical, ge
     }
     return results;
   };
+  const abandonMetadata = async (request) => {
+    const r = copy(request); checkRequest('metadata', r);
+    const current = required(await load());
+    if (current.index.versionId === r.versionId) throw fail('EPENDING', 'Published reconciliation must finish');
+    const receipt = await adapter.read(locations(r.operationId).receipt);
+    if (receipt.status === 'unavailable') throw fail('ECLOUD', 'Reconciliation receipt unavailable');
+    if (receipt.status === 'ok') return perform('metadata', r, true);
+    const path = 'recovery/abandoned-reconciliations/' + r.operationId + '.json';
+    const previous = await adapter.read(path);
+    if (previous.status === 'missing') await verifiedArtifact(path, json({ kind: 'metadata', request: r, index: current.index }));
+    else required(previous);
+    return perform('metadata', r, true);
+  };
   return {
+    abandonMetadata,
     preserveBodyConflict: (r) => perform('body', r), reconcileMetadata: (r) => perform('metadata', r),
     recoverEditedDeletion: (r) => perform('edit-delete', r), recoverOrphans: (r) => perform('orphans', r),
     readConflict, listConflicts, recover

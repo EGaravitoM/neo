@@ -30,11 +30,13 @@ function createNotesRuntime({ app, ipcMain, enabled, libraryRoot, libName, avail
     return { adapter, store: createNotesStore(adapter), assertValid };
   } });
   const trusted = (event) => event && windows.has(event.sender) && event.senderFrame === event.sender.mainFrame;
-  for (const [channel, method] of [['capabilities', 'capabilities'], ['load', 'load'], ['read', 'read'], ['create', 'create'], ['rename', 'rename'], ['save', 'save'], ['refresh', 'refresh'], ['copy', 'copy']]) {
+  for (const [channel, method] of [['capabilities', 'capabilities'], ['load', 'load'], ['read', 'read'], ['create', 'create'], ['rename', 'rename'], ['save', 'save'], ['refresh', 'refresh'], ['copy', 'copy'], ['organize', 'organize'], ['undoOrganization', 'undoOrganization'], ['organizationState', 'organizationState']]) {
     ipcMain.handle('notes:' + channel, async (event, ...args) => {
       try {
         if (!trusted(event)) throw fail('EACCES', 'Untrusted notes request');
-        const value = await service[method](...args);
+        const value = ['organize', 'undoOrganization'].includes(method)
+          ? await service[method](args[0], args[1], event.sender.id)
+          : method === 'organizationState' ? await service[method](args[0], event.sender.id) : await service[method](...args);
         return { ok: true, value: channel === 'capabilities' ? { ...value, fixtureInspection: !!enabled } : value };
       } catch (err) {
         logError('custom notes ' + channel, err);

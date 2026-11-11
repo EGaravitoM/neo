@@ -8142,8 +8142,9 @@ if (!NO_HOVER) {
 // right one shows what the manuscript already knows about the chapter on
 // the page: its outline note, its open placeholders, the darlings cut from
 // it. Only "Go to" there leaves the tab.
-// Custom Notes lifecycle is dormant in ordinary launches. Tree controls come in
-// Stage 4; file HTML stays locked until the Stage 3.2 inspector is present.
+// Custom Notes is dormant in ordinary launches. The book-local tree and editor
+// share a domain bridge; HTML is inspected before entering the live page.
+let customNotesTree = null;
 let customNotesController = null;
 let customNotesSessionBook = null;
 let customNotesInspector = null;
@@ -8235,6 +8236,7 @@ async function prepareCustomNotes(inspector) {
 async function openCustomNote(noteId, inspector) {
   const controller = await prepareCustomNotes(inspector);
   await controller.open({ bookId: book.id, kind: 'custom', noteId });
+  if (customNotesTree) customNotesTree.reveal(noteId);
 }
 async function createCustomNote(title = '', inspector) {
   const controller = await prepareCustomNotes(inspector);
@@ -8282,6 +8284,7 @@ if (window.neo.onNotesPrepareClose) { window.neo.onNotesPrepareClose(async (toke
 }); }
 
 async function refreshCustomNotes() {
+  if (customNotesTree && !document.hidden && currentTab === 'notes') { try { await customNotesTree.refresh(); } catch (err) { customNotesError(err); } }
   if (!customNotesController || !customNotesSessionBook || customNotesFrozen || document.hidden || currentTab !== 'notes') return;
   try { await customNotesController.refresh(); } catch (err) { customNotesError(err); }
 }
@@ -8359,7 +8362,7 @@ function renderNotesNav() {
   const words = (s) => (s ? countWords(s) : 0);
   const row = (page, label, text) => {
     const item = document.createElement('div');
-    item.className = 'nav-item notes-item' + (page === notesPage ? ' current' : '') + (page === 'book' ? ' notes-book' : '');
+    item.className = 'nav-item notes-item' + (page === notesPage && !customNotesSessionBook ? ' current' : '') + (page === 'book' ? ' notes-book' : '');
     item.dataset.page = page;
     item.tabIndex = 0;
     item.setAttribute('role', 'button');
@@ -8387,6 +8390,7 @@ function renderNotesNav() {
   row('book', t('The Book'), notesPeeksBook);
   // simple NEO lists only the chapter pages that have notes on them
   const shown = (chId) => moreOn() || !!notesPeeks[chId];
+  mountCustomNotesTree(list);
   if (!book.chapterOrder.some((c) => isStory(c) && shown(c))) return;
   const sep = document.createElement('div');
   sep.className = 'notes-sep';
@@ -8406,6 +8410,31 @@ function renderNotesNav() {
     if (!isStory(chId) || !shown(chId)) continue;
     row(chId, notesLabel(chId), notesPeeks[chId] || '');
   }
+}
+
+function mountCustomNotesTree(host) {
+  if (!book || IS_POCKET || !window.NeoPlanetNotesTree) return;
+  if (!customNotesTree) customNotesTree = window.NeoPlanetNotesTree.createNotesTree({
+    api: window.neo, t, locale: () => NeoI18n.getLocale(),
+    currentBook: () => book && book.id, canManage: moreOn,
+    openNote: openCustomNote, createNote: createCustomNote,
+    flushEditor: async () => { if (customNotesController) await customNotesController.flush(); },
+    activeNote: () => customNotesSessionBook && $('#aux-editor').dataset.customNoteId,
+    removeOpenNote: async (id) => {
+      if ($('#aux-editor').dataset.customNoteId !== id) return;
+      // Writing made while trash was reaching disk must recover into an active
+      // note before navigation, rather than disappearing with the deleted view.
+      if (customNotesController) await customNotesController.flush();
+      if ($('#aux-editor').dataset.customNoteId !== id) return;
+      await leaveCustomNotes(); notesPage = 'book'; switchTab('notes');
+    },
+    titleChanged: (id, title) => {
+      if (customNotesController) customNotesController.updateTitle(book.id, id, title);
+      if (book && customNotesSessionBook === book.id && $('#aux-editor').dataset.customNoteId === id) $('#aux-title').textContent = title || t('Untitled');
+    },
+    onError: customNotesError
+  });
+  customNotesTree.mount(host, book.id).catch(customNotesError);
 }
 
 // turn to another page without leaving the tab
@@ -8882,7 +8911,7 @@ let tabPlaces = {};
 let auxLoad = 0; // which Notes read is the current one
 function switchTab(name) {
   if (customNotesSessionBook) {
-    if (name === 'notes' && currentTab === 'notes') { applyBright(); return; }
+    if (name === 'notes' && currentTab === 'notes') { applyBright(); renderNotesNav(); return; }
     return leaveCustomNotes().then(() => switchTab(name));
   }
   closeCardEditor();

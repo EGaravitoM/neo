@@ -300,6 +300,14 @@ function createNotesHistory({ adapter, load, read, ensure, replaceCanonical, bef
       return perform(kind, r, true);
     }
     const location = paths(r.operationId);
+    const abandoned = await adapter.read('recovery/abandoned-history/' + r.operationId + '.json');
+    if (abandoned.status === 'unavailable') throw fail('ECLOUD', 'History conflict evidence unavailable');
+    if (abandoned.status === 'ok') {
+      let record;
+      try { record = JSON.parse(abandoned.text); } catch { throw fail('EINVAL', 'Invalid history conflict evidence'); }
+      if (record.kind !== kind || json(record.request) !== json(r) || model.validateIndex(record.index).status !== 'ok') throw fail('EINVAL', 'History conflict identity reused');
+      return { status: 'conflict-preserved', versionId: record.index.versionId };
+    }
     const encoded = json({ kind, request: r });
     const receipt = await adapter.read(location.receipt);
     if (receipt.status === 'unavailable') throw fail('ECLOUD', 'History receipt unavailable');
@@ -334,7 +342,26 @@ function createNotesHistory({ adapter, load, read, ensure, replaceCanonical, bef
     }
     return results;
   };
+  // A rejected trash/restore is not a completed deletion. Preserve its inputs
+  // and the competing index, then retire it without changing any canonical file.
+  const abandon = async (kind, request) => {
+    validateRequest(kind, request);
+    if (!['trash', 'restore-trash'].includes(kind)) throw fail('EINVAL', 'Only rejected organization history can be retired');
+    const current = required(await load());
+    if (current.index.versionId === request.versionId) throw fail('EPENDING', 'Published history must finish, not be retired');
+    const receipt = await adapter.read(paths(request.operationId).receipt);
+    if (receipt.status === 'unavailable') throw fail('ECLOUD', 'History receipt unavailable');
+    if (receipt.status === 'ok') return perform(kind, request, true);
+    if (kind === 'trash') await ensure('recovery/abandoned-inputs/' + request.operationId + '/' + request.noteId + '.html', request.expectedBodyToken, true);
+    const marker = { kind, request: clone(request), index: current.index };
+    const path = 'recovery/abandoned-history/' + request.operationId + '.json';
+    const previous = await adapter.read(path);
+    if (previous.status === 'missing') await ensure(path, json(marker), true);
+    else required(previous);
+    return perform(kind, request, true);
+  };
   return {
+    abandonOrganization: (kind, r) => abandon(kind, clone(r)),
     saveNote: (r) => perform('save', r), trashNote: (r) => perform('trash', r),
     restoreTrash: (r) => perform('restore-trash', r), restoreRevision: (r) => perform('restore-revision', r),
     listRevisions, readRevision, listTrash, readTrash, recover
