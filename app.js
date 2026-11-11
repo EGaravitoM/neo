@@ -2511,6 +2511,7 @@ $('#author-chip').onclick = async () => {
 
 let openGeneration = 0;
 async function openBook(bookId) {
+  if (notesExplorer) notesExplorer.detach(); clearNotesRecoveryPreview();
   await leaveCustomNotes();
   // a book being exported from the shelf finishes first (it borrows the
   // open book's place for the moment it takes)
@@ -8144,6 +8145,8 @@ if (!NO_HOVER) {
 // it. Only "Go to" there leaves the tab.
 // Custom Notes is dormant in ordinary launches. The book-local tree and editor
 // share a domain bridge; HTML is inspected before entering the live page.
+let notesExplorer = null;
+let notesRecoveryPreview = null;
 let customNotesTree = null;
 let customNotesController = null;
 let customNotesSessionBook = null;
@@ -8185,7 +8188,84 @@ function customNotesStatus(text) {
   }
   status.textContent = text; status.hidden = !text;
 }
+function clearNotesRecoveryPreview() {
+  if (!notesRecoveryPreview) return;
+  $('#custom-notes-preview')?.remove(); notesRecoveryPreview = null;
+}
+function notesExplorerDocument() {
+  if (!book) return null;
+  if (notesRecoveryPreview) return notesRecoveryPreview.returnDocument;
+  const ed = $('#aux-editor');
+  if (ed.dataset.customNoteId && ed.dataset.customBookId === book.id) return { bookId: book.id, kind: 'custom', noteId: ed.dataset.customNoteId, title: $('#aux-title').textContent };
+  return { bookId: book.id, kind: notesPage === 'book' ? 'book' : 'chapter', ...(notesPage !== 'book' ? { chapterId: notesPage } : {}), title: $('#aux-title').textContent };
+}
+async function showNotesRecoveryPreview(snapshot) {
+  const owner = book && book.id; const returnDocument = notesRecoveryPreview?.returnDocument || notesExplorerDocument();
+  if (customNotesController) await customNotesController.flush();
+  if (!book || book.id !== owner || currentTab !== 'notes') return;
+  flushAux(); await leaveCustomNotes();
+  if (!book || book.id !== owner || currentTab !== 'notes') return;
+  clearNotesRecoveryPreview(); auxLoad++;
+  notesRecoveryPreview = { bookId: owner, returnDocument };
+  const ed = $('#aux-editor'); ed.hidden = true; ed.dataset.kind = ''; ed.dataset.book = ''; ed.contentEditable = 'false';
+  $('#aux-title').textContent = snapshot.title;
+  for (const selector of ['#notes-outline', '#notes-up', '#custom-notes-copy']) if ($(selector)) $(selector).hidden = true;
+  const body = document.createElement('div'); body.id = 'custom-notes-preview'; body.tabIndex = 0; body.setAttribute('role', 'document'); body.setAttribute('aria-label', t('Read-only recovery preview'));
+  if (snapshot.text !== undefined) body.textContent = snapshot.text;
+  else {
+    const checked = window.NeoPlanetNotesHtml.inspect(snapshot.html || '');
+    if (checked.status === 'editable') body.innerHTML = checked.html;
+    else body.textContent = checked.previewText || '';
+  }
+  $('#aux-paper').append(body);
+}
+async function openNotesExplorerDocument(document, result) {
+  if (!book || document.bookId !== book.id) return;
+  if (result && result.status !== 'ok') return showNotesRecoveryPreview({ title: result.title, text: t('This note is not available on this device yet.') });
+  clearNotesRecoveryPreview();
+  if (notesExplorer) notesExplorer.navigated();
+  if (document.kind === 'custom') return openCustomNote(document.noteId);
+  await leaveCustomNotes();
+  if (!book || document.bookId !== book.id) return;
+  const page = document.kind === 'book' ? 'book' : document.chapterId;
+  if (page !== 'book') notesPeeks[page] = result ? htmlText(result.html || '') || ' ' : notesPeeks[page] || ' ';
+  notesPage = page; switchTab('notes');
+  const owner = book.id; const load = auxLoad;
+  while (true) {
+    if (!book || book.id !== owner || currentTab !== 'notes' || auxLoad !== load) return;
+    const ed = $('#aux-editor');
+    if (ed.dataset.book === owner && ed.dataset.kind === notesKind(page)) return;
+    await new Promise((resolve) => setTimeout(resolve, 16));
+  }
+}
+async function closeNotesRecoveryPreview(reopen) {
+  const document = notesRecoveryPreview?.returnDocument;
+  clearNotesRecoveryPreview();
+  if (reopen && document && book && document.bookId === book.id) await openNotesExplorerDocument(document);
+}
+function mountNotesExplorer(host) {
+  if (!book || IS_POCKET || !window.NeoPlanetNotesExplorer) return;
+  if (!notesExplorer) { notesExplorer = window.NeoPlanetNotesExplorer.createNotesExplorer({
+    api: window.neo, t, locale: () => NeoI18n.getLocale(), currentBook: () => book && book.id,
+    catalogLegacy: () => [{ document: { kind: 'book' }, title: t('The Book'), location: t('The Book') }, ...book.chapterOrder.filter(isStory).map((chapterId) => ({ document: { kind: 'chapter', chapterId }, title: notesLabel(chapterId), location: t('Chapters') }))],
+    liveDocuments: (bookId) => {
+      const live = customNotesController ? customNotesController.liveDocuments(bookId).map((r) => ({ ...r, title: r.title || t('Untitled') })) : [];
+      if (!book || book.id !== bookId) return live;
+      for (const job of Object.values(auxPending)) if (job.bookId === bookId && /^notes(?:-|$)/.test(job.kind)) live.push({ document: { bookId, kind: job.kind === 'notes' ? 'book' : 'chapter', ...(job.kind === 'notes' ? {} : { chapterId: job.kind.slice(6) }) }, html: job.html });
+      const ed = $('#aux-editor');
+      if (!ed.hidden && ed.dataset.book === bookId && ed.dataset.kind) live.push({ document: { bookId, kind: ed.dataset.kind === 'notes' ? 'book' : 'chapter', ...(ed.dataset.kind === 'notes' ? {} : { chapterId: ed.dataset.kind.slice(6) }) }, html: ed.innerHTML });
+      return live;
+    },
+    currentDocument: notesExplorerDocument, editorRoot: () => !$('#aux-editor').hidden ? $('#aux-editor') : null,
+    openDocument: openNotesExplorerDocument, preview: showNotesRecoveryPreview, closePreview: closeNotesRecoveryPreview,
+    flush: async () => { if (customNotesController) await customNotesController.flush(); flushAux(); },
+    dataChanged: async (bookId) => { if (book && book.id === bookId && customNotesTree) await customNotesTree.refresh(); },
+    onMode: (active) => notesNavList().classList.toggle('notes-exploring', active), onError: customNotesError
+  }); }
+  notesExplorer.mount(host, book.id).catch(customNotesError);
+}
 async function prepareCustomNotes(inspector) {
+  clearNotesRecoveryPreview();
   const capabilities = window.neo.notesCapabilities ? await window.neo.notesCapabilities() : { enabled: false };
   if (!capabilities.enabled || !book || !window.NeoPlanetNotesUI) throw new Error('Custom Notes is not enabled');
   // Only the isolated unpackaged test profile can supply a trusted fixture
@@ -8234,6 +8314,7 @@ async function prepareCustomNotes(inspector) {
   return customNotesController;
 }
 async function openCustomNote(noteId, inspector) {
+  if (notesExplorer) notesExplorer.navigated();
   const controller = await prepareCustomNotes(inspector);
   await controller.open({ bookId: book.id, kind: 'custom', noteId });
   if (customNotesTree) customNotesTree.reveal(noteId);
@@ -8284,6 +8365,7 @@ if (window.neo.onNotesPrepareClose) { window.neo.onNotesPrepareClose(async (toke
 }); }
 
 async function refreshCustomNotes() {
+  if (notesExplorer && !document.hidden && currentTab === 'notes') { try { await notesExplorer.refresh(); } catch (err) { customNotesError(err); } }
   if (customNotesTree && !document.hidden && currentTab === 'notes') { try { await customNotesTree.refresh(); } catch (err) { customNotesError(err); } }
   if (!customNotesController || !customNotesSessionBook || customNotesFrozen || document.hidden || currentTab !== 'notes') return;
   try { await customNotesController.refresh(); } catch (err) { customNotesError(err); }
@@ -8390,7 +8472,7 @@ function renderNotesNav() {
   row('book', t('The Book'), notesPeeksBook);
   // simple NEO lists only the chapter pages that have notes on them
   const shown = (chId) => moreOn() || !!notesPeeks[chId];
-  mountCustomNotesTree(list);
+  mountCustomNotesTree(list); mountNotesExplorer(list);
   if (!book.chapterOrder.some((c) => isStory(c) && shown(c))) return;
   const sep = document.createElement('div');
   sep.className = 'notes-sep';
@@ -8439,6 +8521,8 @@ function mountCustomNotesTree(host) {
 
 // turn to another page without leaving the tab
 function openNotesPage(page) {
+  if (notesExplorer) notesExplorer.navigated();
+  if (notesRecoveryPreview) { clearNotesRecoveryPreview(); notesPage = page; return switchTab('notes'); }
   if (!book || !notesPageOk(page)) page = 'book';
   if (customNotesSessionBook) return leaveCustomNotes().then(() => { notesPage = page; switchTab('notes'); });
   if (currentTab === 'notes' && page === notesPage && !customNotesSessionBook) return;
@@ -8910,6 +8994,11 @@ let tabPlaces = {};
 
 let auxLoad = 0; // which Notes read is the current one
 function switchTab(name) {
+  if (name !== 'notes' && notesExplorer) notesExplorer.navigated();
+  if (notesRecoveryPreview) {
+    if (name === 'notes' && currentTab === 'notes') { applyBright(); renderNotesNav(); return; }
+    clearNotesRecoveryPreview();
+  }
   if (customNotesSessionBook) {
     if (name === 'notes' && currentTab === 'notes') { applyBright(); renderNotesNav(); return; }
     return leaveCustomNotes().then(() => switchTab(name));
@@ -12085,11 +12174,13 @@ $('#aux-editor').addEventListener('input', () => {
   if ($('#aux-editor').dataset.customNoteId) {
     customNotesLastInput = Date.now();
     if (customNotesController && !customNotesFrozen) customNotesController.edit($('#aux-editor').innerHTML);
+    if (notesExplorer) notesExplorer.edited();
     return;
   }
   auxDirty = true;
   scheduleAuxSave();
   notesTyped();
+  if (notesExplorer) notesExplorer.edited();
   if (spellOn) {
     const key = 'aux-' + ($('#aux-editor').dataset.kind || 'notes');
     scheduleSpellRescan(key, $('#aux-editor'));
@@ -13598,6 +13689,7 @@ window.addEventListener('blur', () => { if (book) flushAllSaves(); });
 setInterval(() => { if (book || (customNotesController && customNotesController.hasPending())) flushAllSaves('tick'); }, 20000);
 
 async function backToShelf() {
+  if (notesExplorer) notesExplorer.detach(); clearNotesRecoveryPreview();
   await leaveCustomNotes();
   if (reading) stopReadAloud(false);
   flushAllSaves();
@@ -18522,6 +18614,7 @@ $('#paper-scroll').addEventListener('focusout', (e) => {
   if (sel.rangeCount && e.target.isContentEditable) pagePlace = { el: e.target, range: sel.getRangeAt(0).cloneRange() };
 });
 function focusPage() {
+  if (notesRecoveryPreview && $('#custom-notes-preview')) { $('#custom-notes-preview').focus(); return; }
   if (pagePlace && pagePlace.el.isConnected && !pagePlace.el.closest('[hidden]')) {
     pagePlace.el.focus({ preventScroll: true });
     const sel = window.getSelection();

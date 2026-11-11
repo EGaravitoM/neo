@@ -35,7 +35,8 @@
     "package:mac": "electron-builder --mac",
     "package:win": "electron-builder --win",
     "package:linux": "electron-builder --linux",
-    "package:all": "electron-builder --mac --win --linux"
+    "package:all": "electron-builder --mac --win --linux",
+    "test:custom-notes-explorer": "electron scripts/planet-notes-explorer.e2e.js"
   },
   "build": {
     "appId": "com.hughhowey.neo",

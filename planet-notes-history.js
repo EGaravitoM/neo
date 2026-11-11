@@ -342,17 +342,22 @@ function createNotesHistory({ adapter, load, read, ensure, replaceCanonical, bef
     }
     return results;
   };
-  // A rejected trash/restore is not a completed deletion. Preserve its inputs
+  // A rejected trash/restore is not a completed operation. Preserve its inputs
   // and the competing index, then retire it without changing any canonical file.
   const abandon = async (kind, request) => {
     validateRequest(kind, request);
-    if (!['trash', 'restore-trash'].includes(kind)) throw fail('EINVAL', 'Only rejected organization history can be retired');
+    if (!['trash', 'restore-trash', 'restore-revision'].includes(kind)) throw fail('EINVAL', 'Only rejected trash or restoration history can be retired');
     const current = required(await load());
     if (current.index.versionId === request.versionId) throw fail('EPENDING', 'Published history must finish, not be retired');
     const receipt = await adapter.read(paths(request.operationId).receipt);
     if (receipt.status === 'unavailable') throw fail('ECLOUD', 'History receipt unavailable');
     if (receipt.status === 'ok') return perform(kind, request, true);
-    if (kind === 'trash') await ensure('recovery/abandoned-inputs/' + request.operationId + '/' + request.noteId + '.html', request.expectedBodyToken, true);
+    if (typeof request.expectedBodyToken === 'string') await ensure('recovery/abandoned-inputs/' + request.operationId + '/' + request.noteId + '.html', request.expectedBodyToken, true);
+    if (kind === 'restore-revision') {
+      const body = await read(request.mode === 'new' ? request.newNoteId : request.noteId);
+      if (body.status === 'unavailable') throw fail('ECLOUD', 'Recovery target unavailable');
+      if (body.status === 'ok') await ensure('recovery/abandoned-observations/' + request.operationId + '/' + await hash(body.html) + '.html', body.html, true);
+    }
     const marker = { kind, request: clone(request), index: current.index };
     const path = 'recovery/abandoned-history/' + request.operationId + '.json';
     const previous = await adapter.read(path);

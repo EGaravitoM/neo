@@ -277,6 +277,7 @@ function createNotesStore(adapter) {
     abandonInitialMetadata: (r) => snapshotCommand((copy) => { if (copy.baseVersionId !== null) throw error('EINVAL', 'Expected initial metadata'); return abandonMetadata(copy); }, r),
     abandonMetadata: (r) => snapshotCommand(abandonMetadata, r),
     abandonMetadataResolution: (r) => snapshotCommand((copy) => getRecovery().abandonMetadata(copy), r),
+    abandonRecoveryHistory: (kind, r) => snapshotCommand((copy) => getHistory().abandonOrganization(kind, copy), r),
     abandonOrganizationHistory: (kind, r) => snapshotCommand((copy) => getHistory().abandonOrganization(kind, copy), r),
     acknowledgeMergedMetadata: (r) => snapshotCommand(acknowledgeMergedMetadata, r),
     preserveBodyConflict: (r) => recoveryCommand('preserveBodyConflict', r),

@@ -24,13 +24,24 @@ function createNotesRuntime({ app, ipcMain, enabled, libraryRoot, libName, avail
       const book = JSON.parse(await fs.readFile(metadata, 'utf8'));
       // As in main's readBookMeta, a copied/renamed folder owns its identity.
       if (!book || typeof book.id !== 'string' || !Array.isArray(book.chapterOrder)) throw fail('EINVAL', 'Invalid book metadata');
+      return book;
     };
     await assertValid();
     const adapter = createDesktopNotesAdapter(path.join(dir, 'notes'), { availability });
-    return { adapter, store: createNotesStore(adapter), assertValid };
+    return { adapter, store: createNotesStore(adapter), assertValid, readLegacy: async ({ page }) => {
+      const book = await assertValid();
+      if (page !== 'book' && (!book.chapterOrder.includes(page) || /[\\/\0]/.test(page))) throw fail('EINVAL', 'Unknown chapter notes page');
+      const file = path.join(dir, page === 'book' ? 'notes.html' : 'notes-' + page + '.html');
+      if (await availability(file) !== 'local') return { status: 'unavailable' };
+      try {
+        const stat = await fs.lstat(file);
+        if (!stat.isFile() || stat.isSymbolicLink()) throw fail('EINVAL', 'Notes must be regular files');
+        return { status: 'ok', html: await fs.readFile(file, 'utf8') };
+      } catch (err) { if (err.code === 'ENOENT') return { status: 'missing' }; throw err; }
+    } };
   } });
   const trusted = (event) => event && windows.has(event.sender) && event.senderFrame === event.sender.mainFrame;
-  for (const [channel, method] of [['capabilities', 'capabilities'], ['load', 'load'], ['read', 'read'], ['create', 'create'], ['rename', 'rename'], ['save', 'save'], ['refresh', 'refresh'], ['copy', 'copy'], ['organize', 'organize'], ['undoOrganization', 'undoOrganization'], ['organizationState', 'organizationState']]) {
+  for (const [channel, method] of [['capabilities', 'capabilities'], ['load', 'load'], ['read', 'read'], ['create', 'create'], ['rename', 'rename'], ['save', 'save'], ['refresh', 'refresh'], ['copy', 'copy'], ['organize', 'organize'], ['undoOrganization', 'undoOrganization'], ['organizationState', 'organizationState'], ['readLegacy', 'readLegacy'], ['recoveryList', 'recoveryList'], ['recoveryRead', 'recoveryRead'], ['recover', 'recover']]) {
     ipcMain.handle('notes:' + channel, async (event, ...args) => {
       try {
         if (!trusted(event)) throw fail('EACCES', 'Untrusted notes request');

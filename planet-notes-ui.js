@@ -176,6 +176,10 @@ function createNotesController({ api, view, inspect, writingDay, makeOperationId
   };
   return {
     open, leave, edit, flush, requestClose, create, rename, hasPending,
+    liveDocuments(bookId) {
+      capture();
+      return [...entries.values()].filter((entry) => entry.document.bookId === bookId && (entry === active || entry.dirty || entry.job)).map((entry) => ({ document: { ...entry.document }, title: entry.title, html: entry.html }));
+    },
     updateTitle(bookId, noteId, title) {
       const entry = entries.get(key({ bookId, noteId }));
       if (entry) { entry.title = title; if (active === entry && !composing) { capture(); show(entry); } }

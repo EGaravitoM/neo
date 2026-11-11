@@ -2446,3 +2446,39 @@ html:lang(ko) .custom-notes-form h4 { letter-spacing: .04em; }
 
 .custom-notes-form input[type="checkbox"]:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 body.light .custom-notes-form input:not([type="checkbox"]):focus, body.light .custom-notes-form select:focus { border-color: var(--accent); }
+
+/* Notes search and recovery share the existing navigation and page fonts. */
+#notes-explorer { font-size: 12px; }
+.notes-explorer-tools { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 18px 10px; opacity: 0; }
+#notes-nav:hover .notes-explorer-tools, #notes-nav:focus-within .notes-explorer-tools { opacity: 1; }
+#notes-explorer button { background: none; border: none; color: #888; padding: 3px 0; font: inherit; text-align: start; }
+#notes-explorer button:hover, #notes-explorer button:focus-visible { color: var(--accent); }
+#notes-explorer button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+#notes-explorer button:disabled { opacity: .5; cursor: default; }
+#notes-nav.notes-exploring > :not(#notes-explorer) { display: none; }
+.notes-explorer-heading { margin: 10px 18px; display: flex; gap: 10px; align-items: baseline; }
+.notes-explorer-heading > span { flex: 1; color: var(--muted); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.notes-explorer-status { margin: 0 18px 8px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.notes-explorer-status:empty { display: none; }
+.notes-explorer-form { margin: 10px 18px; display: grid; gap: 10px; }
+.notes-explorer-form label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; }
+.notes-explorer-form input:not([type="checkbox"]), .notes-explorer-form select { width: 100%; min-width: 0; border: 1px solid #3a3a3a; border-radius: 6px; background: #191919; color: #ddd; padding: 7px 8px; font: inherit; }
+.notes-explorer-form input:focus-visible, .notes-explorer-form select:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+.notes-explorer-form fieldset { border: none; display: grid; gap: 5px; }
+.notes-explorer-form fieldset label { display: flex; gap: 6px; align-items: center; }
+.notes-explorer-form legend { color: var(--muted); margin-bottom: 5px; font-size: 11px; }
+.notes-explorer-form input[type="checkbox"] { accent-color: var(--accent); }
+#notes-explorer .notes-search-result { display: block; width: 100%; padding: 9px 18px; border-left: 3px solid transparent; }
+#notes-explorer .notes-search-result:hover { background: #282828; }
+.notes-result-location { font-size: 10px; color: var(--muted); margin-top: 3px; }
+#notes-explorer .notes-recovery-row { display: block; width: 100%; padding: 9px 18px; border-left: 3px solid transparent; }
+#notes-explorer .notes-recovery-row:hover { background: #282828; }
+.notes-recovery-actions > button { margin: 6px 18px; }
+#custom-notes-preview { font-family: var(--body-font); font-size: calc(var(--editor-size, 16px) * var(--page-zoom, 1)); line-height: 1.7; color: var(--ink); white-space: pre-wrap; outline: none; }
+#custom-notes-preview:focus-visible { outline: 1px solid var(--accent); outline-offset: 8px; }
+::highlight(neo-notes-search) { background-color: rgba(201,168,106,.35); }
+#notes-explorer[aria-busy="true"] .notes-recovery-actions { opacity: .6; pointer-events: none; }
+body.light .notes-explorer-form input:not([type="checkbox"]), body.light .notes-explorer-form select { background: #fbfaf7; color: #2b2926; border-color: #d3cec3; }
+body.light #notes-explorer button { color: #8f8a80; }
+body.light #notes-explorer button:hover, body.light #notes-explorer button:focus-visible { color: var(--accent); }
+body.light #notes-explorer .notes-search-result:hover, body.light #notes-explorer .notes-recovery-row:hover { background: #ede9e1; }

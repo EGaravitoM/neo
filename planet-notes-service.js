@@ -4,6 +4,7 @@ const { randomUUID, createHash } = require('node:crypto');
 const model = require('./planet-notes');
 const { t, getLocale } = require('./i18n');
 const { validateAction } = require('./planet-notes-organization');
+const { createLibraryRecovery } = require('./planet-notes-library-recovery');
 const { createOrganizationService } = require('./planet-notes-organization-service');
 const { createNotesObserver } = require('./planet-notes-observer');
 const fail = (code, message) => Object.assign(new Error(message), { code });
@@ -139,7 +140,12 @@ function createNotesService({ getBook, enabled = false, makeId = (prefix) => pre
     if (!organizations.has(ctx)) organizations.set(ctx, createOrganizationService({ ...ctx, makeId: freshId, now, remember: () => observer(ctx).remember(), locale: getLocale }));
     return organizations.get(ctx);
   };
-  const settleAll = async (ctx) => { await settle(ctx); await organization(ctx).settle(); };
+  const recoveries = new WeakMap();
+  const recovery = (ctx) => {
+    if (!recoveries.has(ctx)) recoveries.set(ctx, createLibraryRecovery({ ...ctx, makeId: freshId, now, remember: () => observer(ctx).remember() }));
+    return recoveries.get(ctx);
+  };
+  const settleAll = async (ctx) => { await settle(ctx); await organization(ctx).settle(); await recovery(ctx).settle(); };
   const command = async (kind, bookId, noteId, request) => {
     active(); bookIdentity(bookId); if (noteId !== null) id(noteId);
     const normalized = normalize(kind, request);
@@ -252,6 +258,24 @@ function createNotesService({ getBook, enabled = false, makeId = (prefix) => pre
     organizationState: async (bookId, session = 'default') => {
       active(); bookIdentity(bookId);
       return serial(bookId, async (ctx) => ({ canUndo: organization(ctx).canUndo(session) }));
+    },
+    readLegacy: async (bookId, request) => {
+      active(); bookIdentity(bookId);
+      if (!request || Object.keys(request).some((key) => key !== 'page') || typeof request.page !== 'string' || /[\\/\0]/.test(request.page)) throw fail('EINVAL', 'Invalid legacy notes page');
+      const normalized = { page: request.page };
+      return serial(bookId, (ctx) => ctx.readLegacy ? ctx.readLegacy(normalized) : { status: 'missing' });
+    },
+    recoveryList: async (bookId, request) => {
+      active(); bookIdentity(bookId); const snapshot = clone(request);
+      return serial(bookId, async (ctx) => { await settleAll(ctx); return recovery(ctx).list(snapshot); });
+    },
+    recoveryRead: async (bookId, request) => {
+      active(); bookIdentity(bookId); const snapshot = clone(request);
+      return serial(bookId, async (ctx) => { await settleAll(ctx); return recovery(ctx).read(snapshot); });
+    },
+    recover: async (bookId, request) => {
+      active(); bookIdentity(bookId); const snapshot = clone(request);
+      return serial(bookId, async (ctx) => { await settleAll(ctx); await observer(ctx).metadata(); return recovery(ctx).perform(snapshot); });
     },
     create: (bookId, request) => command('create', bookId, null, request),
     rename: (bookId, noteId, request) => command('rename', bookId, noteId, request),
