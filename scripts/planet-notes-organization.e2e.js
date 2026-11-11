@@ -42,7 +42,11 @@ async function run() {
     await js(`(() => {const el=document.querySelector(${JSON.stringify(selector)});el.focus();el.select?.();})()`);
     await win.webContents.insertText(text);
   };
-  const key = (keyCode, modifiers = []) => { for (const type of ['keyDown', 'keyUp']) win.webContents.sendInputEvent({ type, keyCode, modifiers }); };
+  const key = (keyCode, modifiers = []) => {
+    win.webContents.sendInputEvent({ type: 'keyDown', keyCode, modifiers });
+    if (keyCode === 'Return' || keyCode === 'Enter') win.webContents.sendInputEvent({ type: 'char', keyCode: '\r', modifiers });
+    win.webContents.sendInputEvent({ type: 'keyUp', keyCode, modifiers });
+  };
   const indexPath = path.join(library, book.id, 'notes', 'index.json');
   const index = () => fs.existsSync(indexPath) ? JSON.parse(fs.readFileSync(indexPath, 'utf8')) : null;
   await click('[data-action="new-group"]'); await input('.custom-notes-form input', 'Characters');
@@ -73,6 +77,22 @@ async function run() {
   await click('[data-action="undo"]'); await until(() => index().notes[0].parentId === nested);
   assert.match(fs.readFileSync(bodyPath, 'utf8'), /Writing to preserve/);
   console.log('PASS: keyboard management and organization undo preserve writing');
+  await until(() => js(`document.getElementById('custom-notes-nav').getAttribute('aria-busy')!=='true'`));
+  await js(`document.querySelector('[data-item-id="${noteId}"]').focus()`);
+  key('F10', ['shift']);
+  await until(() => js(`!!document.querySelector('.pop-menu[role="menu"]')`));
+  key('Down');
+  await until(() => js(`document.activeElement?.textContent===NeoI18n.t('Move')`));
+  key('Return');
+  await until(() => js(`document.activeElement===document.querySelector('.custom-notes-form select')`));
+  key('Escape');
+  await until(() => js(`!document.querySelector('.custom-notes-form') && document.activeElement?.dataset.itemId==='${noteId}'`));
+  await js(`(() => {const row=document.querySelector('[data-item-id="${noteId}"]');const r=row.getBoundingClientRect();row.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.left+20,clientY:r.top+10}));})()`);
+  await until(() => js(`!!document.querySelector('.pop-menu[role="menu"]')`));
+  key('Escape');
+  await until(() => js(`!document.querySelector('.pop-menu')`));
+  console.log('PASS: the existing context menu supports keyboard actions and right-click cancellation');
+
 
   await click('[data-action="labels"]'); await input('.custom-notes-form [data-field="label-name"]', 'plot');
   await click('.custom-notes-form button[type="submit"]'); await until(() => index().labels.length === 1);
@@ -141,6 +161,12 @@ async function run() {
     await js(`document.getElementById('nav-pane').classList.add('open');document.querySelector('#custom-notes-nav [role=treeitem]')?.focus()`);
     await new Promise((resolve) => setTimeout(resolve, 180));
     fs.writeFileSync(process.env.NEO_SHOT, (await win.webContents.capturePage()).toPNG());
+    const selectedId = await js(`document.querySelector('[data-item-id][aria-selected="true"]').dataset.itemId`);
+    await click(`[data-item-id="${selectedId}"] [data-action="organize"]`);
+    fs.writeFileSync(process.env.NEO_SHOT.replace(/\.png$/, '-form.png'), (await win.webContents.capturePage()).toPNG());
+    await js(`document.body.classList.add('light')`);
+    fs.writeFileSync(process.env.NEO_SHOT.replace(/\.png$/, '-light.png'), (await win.webContents.capturePage()).toPNG());
+
   }
 }
 run().then(() => { clearTimeout(deadline); fs.rmSync(root, { recursive: true, force: true }); app.exit(0); }, (err) => { clearTimeout(deadline); console.error(err.stack || err); console.error('Fixture retained:', root); app.exit(1); });

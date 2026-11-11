@@ -2393,34 +2393,56 @@ html:lang(ko) :is(#aux-paper h2, .pen-slot, .shelf-label, .shelf-bound-mark, .pt
 #aux-paper:hover #custom-notes-copy, #aux-paper:focus-within #custom-notes-copy { opacity: 1; }
 #aux-editor[contenteditable="false"][data-custom-note-id] { white-space: pre-wrap; }
 
-/* Book-local Custom Notes: uses the existing Notes navigation pane. */
-#custom-notes-nav { border-top: 1px solid var(--line, #8884); margin-top: 1em; padding: .5em; }
-.custom-notes-header h3 { font-size: .85em; font-weight: 500; margin: .4em 0; }
-.custom-notes-tools { display: flex; flex-wrap: wrap; gap: .3em; opacity: 0; }
+/* Custom Notes follows the existing Notes navigation, not a second toolbar. */
+#custom-notes-nav { margin-top: 6px; border-top: 1px solid #2c2c2c; font-size: 13px; }
+.custom-notes-header.ns-label { display: block; padding: 14px 18px 6px; }
+.custom-notes-header h3 { font: inherit; font-weight: 400; }
+.custom-notes-tools { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 6px; opacity: 0; text-transform: none; letter-spacing: normal; }
 #custom-notes-nav:hover .custom-notes-tools, #custom-notes-nav:focus-within .custom-notes-tools { opacity: 1; }
-#custom-notes-nav button, #custom-notes-nav input, #custom-notes-nav select { font: inherit; color: inherit; }
-#custom-notes-nav button { background: transparent; border: 1px solid var(--line, #8884); border-radius: 4px; padding: .2em .4em; cursor: pointer; }
-#custom-notes-nav button:focus-visible, .custom-note-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+#custom-notes-nav button { border: 0; border-radius: 0; background: none; color: #777; padding: 2px 0; font-family: inherit; font-size: 11px; line-height: 1.5; text-align: start; }
+#custom-notes-nav button:hover, #custom-notes-nav button:focus-visible { color: var(--accent); }
+#custom-notes-nav button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 #custom-notes-nav button:disabled { opacity: .4; cursor: default; }
-.custom-note-row { display: flex; align-items: center; gap: .3em; min-height: 2em; cursor: pointer; border-top: 2px solid transparent; border-bottom: 2px solid transparent; }
-.custom-note-row[aria-selected="true"] { background: #8882; }
-.custom-note-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-.custom-note-labels, .custom-notes-path, .custom-notes-status { font-size: .75em; opacity: .75; overflow-wrap: anywhere; }
-.custom-note-row [data-action="organize"] { opacity: 0; }
+.custom-note-row.nav-item { position: relative; padding-top: 8px; padding-bottom: 8px; padding-inline-end: 14px; }
+.custom-note-row .n-row { justify-content: flex-start; gap: 5px; min-height: 16px; cursor: pointer; }
+.custom-note-row[aria-selected="true"]:not(.current) { background: #282828; }
+.custom-note-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.custom-note-disclosure { width: 9px; flex-shrink: 0; font-size: 10px; color: var(--muted); }
+.custom-note-row .custom-note-title { flex: 1; min-width: 0; max-width: none; }
+.custom-note-labels { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.custom-note-row [data-action="organize"] { opacity: 0; flex-shrink: 0; padding: 0 3px; font-size: 16px; line-height: 16px; }
 .custom-note-row:hover [data-action="organize"], .custom-note-row:focus-within [data-action="organize"] { opacity: 1; }
-.custom-note-row[data-drop="inside"] { outline: 2px solid var(--accent); }
-.custom-note-row[data-drop="before"] { border-top-color: var(--accent); }
-.custom-note-row[data-drop="after"] { border-bottom-color: var(--accent); }
-.custom-notes-root { font-size: .8em; padding: .5em; }
-.custom-notes-root button { opacity: 0; margin-inline-start: .5em; }
+.custom-note-row[data-drop="inside"], .custom-notes-root[data-drop="inside"] { outline: 1px solid var(--accent); outline-offset: -1px; }
+.custom-note-row[data-drop="before"]::before, .custom-note-row[data-drop="after"]::after { content: ''; position: absolute; inset-inline: 14px; height: 2px; background: var(--accent); border-radius: 1px; }
+.custom-note-row[data-drop="before"]::before { top: 0; }
+.custom-note-row[data-drop="after"]::after { bottom: 0; }
+.custom-notes-path, .custom-notes-status { margin: 0 18px 6px; font-size: 11px; line-height: 1.5; color: #777; overflow-wrap: anywhere; }
+.custom-notes-status:empty { display: none; }
+.custom-notes-root { margin: 8px 18px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: 10px; color: #5d5d5d; }
+.custom-notes-root button { opacity: 0; }
 .custom-notes-root:hover button, .custom-notes-root:focus-within button { opacity: 1; }
-.custom-notes-form { padding: .5em 0; display: grid; gap: .5em; }
-.custom-notes-form h4 { margin: 0; font-weight: 500; }
-.custom-notes-form label { display: grid; gap: .2em; font-size: .85em; }
-.custom-notes-form input:not([type="checkbox"]), .custom-notes-form select { width: 100%; min-width: 0; background: transparent; border: 1px solid var(--line, #8884); border-radius: 3px; padding: .35em; }
-.custom-label-row { display: flex; flex-wrap: wrap; gap: .3em; align-items: center; }
-.custom-label-row label { display: flex; align-items: center; flex: 1; }
-
-.custom-notes-root[data-drop="inside"] { outline: 2px solid var(--accent); }
-
+.custom-notes-form { margin: 12px 18px; padding: 12px 0 0; border-top: 1px solid #2c2c2c; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+.custom-notes-form h4, .custom-notes-form label, .custom-notes-form p, .custom-label-row { grid-column: 1 / -1; }
+.custom-notes-form h4 { margin-bottom: 2px; font-size: 10px; font-weight: 400; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); overflow-wrap: anywhere; }
+.custom-notes-form label { display: grid; gap: 5px; font-size: 11px; color: var(--muted); }
+.custom-notes-form p { font-size: 11px; line-height: 1.5; color: #777; }
+.custom-notes-form input:not([type="checkbox"]), .custom-notes-form select { box-sizing: border-box; width: 100%; min-width: 0; border: 1px solid #3a3a3a; border-radius: 6px; background: #191919; color: #ddd; padding: 7px 8px; font-family: inherit; font-size: 12px; line-height: 1.4; }
+.custom-notes-form input:not([type="checkbox"]):focus, .custom-notes-form select:focus { outline: none; border-color: var(--accent); }
+.custom-notes-form label:has(> input[type="checkbox"]) { display: flex; align-items: flex-start; gap: 6px; line-height: 1.5; }
+.custom-notes-form input[type="checkbox"] { accent-color: var(--accent); margin-top: 2px; flex-shrink: 0; }
+.custom-notes-form [data-action="move"], .custom-notes-form [data-action="delete-group"], .custom-notes-form [data-action="trash-note"], .custom-notes-form [data-action="sort"] { grid-column: 1 / -1; }
+#custom-notes-nav :is([data-action="delete-group"], [data-action="trash-note"], [data-action="delete-label"]):hover { color: var(--red); }
+.custom-label-row { display: flex; flex-wrap: wrap; gap: 5px 10px; align-items: center; }
+.custom-label-row label, .custom-label-row > span { flex: 1; overflow-wrap: anywhere; font-size: 12px; }
 #custom-notes-nav[aria-busy="true"] { opacity: .65; }
+body.bright #custom-notes-nav button, body.bright .custom-notes-path, body.bright .custom-notes-status { color: #aaa; }
+body.bright #custom-notes-nav button:hover, body.bright #custom-notes-nav button:focus-visible { color: var(--accent); }
+body.light #custom-notes-nav, body.light .custom-notes-form { border-color: #dedad2; }
+body.light .custom-note-row[aria-selected="true"]:not(.current) { background: #ede9e1; }
+body.light .custom-notes-form input:not([type="checkbox"]), body.light .custom-notes-form select { background: #fbfaf7; border-color: #d3cec3; color: #2b2926; }
+body.light #custom-notes-nav button, body.light .custom-notes-path, body.light .custom-notes-status, body.light .custom-notes-form p { color: #8f8a80; }
+body.light #custom-notes-nav button:hover, body.light #custom-notes-nav button:focus-visible { color: var(--accent); }
+html:lang(ko) .custom-notes-form h4 { letter-spacing: .04em; }
+
+.custom-notes-form input[type="checkbox"]:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+body.light .custom-notes-form input:not([type="checkbox"]):focus, body.light .custom-notes-form select:focus { border-color: var(--accent); }

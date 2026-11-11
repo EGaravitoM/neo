@@ -148,3 +148,16 @@ state rather than repeatedly attempting a known rejected operation.
 The collection size and nesting remain unlimited by product policy. Full large/deep
 collection stress testing, unavailable-cloud behavior and cross-device release
 verification remain Stage 7 gates. No Pocket organization UI is introduced.
+
+
+## Stage 4 visual integration
+
+Custom Notes uses the existing Notes pane's navigation rows, 13px labels, muted
+section headings, gold active-note edge and hover/focus action treatment. Inline
+forms use the app's quiet buttons and input styling, including light/bright theme
+and keyboard-focus states. Row actions use a compact ellipsis; right-click and
+Shift-F10 reuse the app's existing popMenu, while F2 still opens inline management.
+Destination choices display group paths; duplicate paths receive numbered display
+suffixes rather than exposing storage IDs. The stored identity is unchanged.
+The Electron suite checks context-menu keyboard navigation and cancellation along
+with the existing organization and writing-preservation journeys.

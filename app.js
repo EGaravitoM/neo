@@ -8415,7 +8415,7 @@ function renderNotesNav() {
 function mountCustomNotesTree(host) {
   if (!book || IS_POCKET || !window.NeoPlanetNotesTree) return;
   if (!customNotesTree) customNotesTree = window.NeoPlanetNotesTree.createNotesTree({
-    api: window.neo, t, locale: () => NeoI18n.getLocale(),
+    api: window.neo, t, locale: () => NeoI18n.getLocale(), contextMenu: popMenu,
     currentBook: () => book && book.id, canManage: moreOn,
     openNote: openCustomNote, createNote: createCustomNote,
     flushEditor: async () => { if (customNotesController) await customNotesController.flush(); },
@@ -18593,6 +18593,8 @@ document.addEventListener('keydown', (e) => {
     REGIONS[(here + (e.shiftKey ? REGIONS.length - 1 : 1)) % REGIONS.length].enter();
     return;
   }
+  // Let the Notes inline form cancel first; the next Esc returns to writing.
+  if (e.key === 'Escape' && e.target.closest?.('.custom-notes-form')) return;
   // Esc from a pane or the bottom bar: back to the words, not to the shelf
   if (e.key === 'Escape' && !e.isComposing && here > 0 && $('#searchbar').hidden) {
     e.preventDefault();

@@ -3,7 +3,7 @@
 (function () {
 const domain = globalThis.NeoPlanetNotesOrganization;
 /** Notes-only navigation. All persistence uses domain bridge commands. */
-function createNotesTree({ api, t, locale, currentBook, canManage, openNote, createNote, flushEditor, removeOpenNote, activeNote, titleChanged, onError }) {
+function createNotesTree({ api, t, locale, currentBook, canManage, openNote, createNote, flushEditor, removeOpenNote, activeNote, titleChanged, contextMenu, onError }) {
   const root = document.createElement('section'); root.id = 'custom-notes-nav';
   const sessions = new Map(); let bookId = null; let index = null; let selected = null; let generation = 0;
   let busy = false; let pending = null; let canUndo = false; let dragId = null; let drop = null; let dropTarget = null; let mode = null; let renderedFormKey = null;
@@ -19,7 +19,7 @@ function createNotesTree({ api, t, locale, currentBook, canManage, openNote, cre
   };
   const el = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
   const button = (text, action, key) => {
-    const b = el('button', text); b.type = 'button'; b.dataset.action = key;
+    const b = el('button', text, 'btn-quiet'); b.type = 'button'; b.dataset.action = key;
     b.addEventListener('click', () => Promise.resolve().then(action).catch(error)); return b;
   };
   const error = (err) => {
@@ -96,12 +96,18 @@ function createNotesTree({ api, t, locale, currentBook, canManage, openNote, cre
   };
   const parentSelect = (box, value, movingId = null) => {
     const label = el('label', t('Destination')); const select = el('select'); select.dataset.field = 'destination';
-    const options = [{ id: null, title: t('Custom Notes') }, ...index.groups.filter((g) => !movingId || domain.canMove(index, movingId, g.id)).map((g) => ({ id: g.id, title: location(g.id) + ' · ' + g.id.slice(-6) }))];
+    const destinations = index.groups.map((g) => ({ id: g.id, title: location(g.id) }));
+    const counts = new Map(); const positions = new Map();
+    for (const destination of destinations) counts.set(destination.title, (counts.get(destination.title) || 0) + 1);
+    const options = [{ id: null, title: t('Custom Notes') }, ...destinations.map((destination) => {
+      const n = (positions.get(destination.title) || 0) + 1; positions.set(destination.title, n);
+      return { id: destination.id, title: counts.get(destination.title) > 1 ? t('{name} ({n})', { name: destination.title, n }) : destination.title };
+    }).filter((g) => !movingId || domain.canMove(index, movingId, g.id))];
     for (const option of options) { const node = el('option', option.title); node.value = option.id || ''; node.selected = option.id === value; select.append(node); }
     label.append(select); box.append(label); return () => select.value || null;
   };
   const submit = (box, text, action) => {
-    const b = el('button', text); b.type = 'submit'; box.append(b);
+    const b = el('button', text, 'btn-quiet'); b.type = 'submit'; box.append(b);
     box.addEventListener('submit', (e) => { e.preventDefault(); Promise.resolve().then(action).catch(error); });
     box.append(button(t('Cancel'), () => { mode = null; render(); }, 'cancel'));
   };
@@ -168,6 +174,26 @@ function createNotesTree({ api, t, locale, currentBook, canManage, openNote, cre
       box.append(button(t('Delete group'), () => run({ action: 'deleteGroup', itemId: value.id }), 'delete-group'));
     } else box.append(button(t('Move note to trash'), () => run({ action: 'trashNote', noteId: value.id }), 'trash-note'));
   };
+  const showContextMenu = async (event, value, row) => {
+    if (!canManage() || busy || !contextMenu) return;
+    event.preventDefault(); event.stopPropagation(); selected = value.id; state().selected = selected;
+    const owner = bookId; const turn = generation;
+    const isGroup = group(value.id);
+    const choices = [
+      { label: t('Rename'), value: 'rename' }, { label: t('Move'), value: 'move' },
+      ...(!isGroup ? [{ label: t('Labels'), value: 'labels' }] : []),
+      '-', { label: t('Move up'), value: 'up' }, { label: t('Move down'), value: 'down' },
+      '-', { label: isGroup ? t('Delete group') : t('Move note to trash'), value: 'delete', danger: true }
+    ];
+    const choice = await contextMenu(event.clientX, event.clientY, choices, { title: labelFor(value), from: row });
+    if (!choice || owner !== currentBook() || turn !== generation || !canManage()) return;
+    if (!index || ![...index.groups, ...index.notes].some((item) => item.id === value.id)) return;
+    selected = value.id; state().selected = selected;
+    if (choice === 'up' || choice === 'down') return reorder(choice === 'up' ? -1 : 1);
+    if (choice === 'delete') return run(isGroup ? { action: 'deleteGroup', itemId: value.id } : { action: 'trashNote', noteId: value.id });
+    mode = choice === 'labels' ? 'labels' : 'item'; render();
+    root.querySelector(choice === 'move' ? '.custom-notes-form select' : '.custom-notes-form input')?.focus();
+  };
   const open = async (id) => { await openNote(id); select(id); };
   const keydown = (event, rows, at) => {
     const value = rows[at]; const expanded = state().expanded;
@@ -187,7 +213,8 @@ function createNotesTree({ api, t, locale, currentBook, canManage, openNote, cre
       if (value.kind === 'note') open(value.item.id).catch(error);
       else { expanded.has(value.item.id) ? expanded.delete(value.item.id) : expanded.add(value.item.id); render(); focusRow(value.item.id); }
       return;
-    } else if ((event.key === 'F2' || event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) && manage()) { event.preventDefault(); event.stopPropagation(); mode = 'item'; selected = value.item.id; render(); root.querySelector('.custom-notes-form input')?.focus(); return; }
+    } else if ((event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) && manage() && contextMenu) { showContextMenu(event, value.item, event.currentTarget).catch(error); return; }
+    else if ((event.key === 'F2' || event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) && manage()) { event.preventDefault(); event.stopPropagation(); mode = 'item'; selected = value.item.id; render(); root.querySelector('.custom-notes-form input')?.focus(); return; }
     else return;
     event.preventDefault(); event.stopPropagation(); if (target) select(target, true);
   };
@@ -219,7 +246,7 @@ function createNotesTree({ api, t, locale, currentBook, canManage, openNote, cre
     const activeField = oldFields.indexOf(document.activeElement);
     const focused = root.contains(document.activeElement) ? document.activeElement.closest('[data-item-id]')?.dataset.itemId : null;
     root.replaceChildren();
-    const header = el('div', undefined, 'custom-notes-header'); header.append(el('h3', t('Custom Notes'))); root.append(header);
+    const header = el('div', undefined, 'custom-notes-header ns-label'); header.append(el('h3', t('Custom Notes'))); root.append(header);
     const tools = el('div', undefined, 'custom-notes-tools'); tools.hidden = !canManage();
     tools.append(button(t('New note'), () => { mode = 'note'; render(); }, 'new-note'), button(t('New group'), () => { mode = 'group'; render(); }, 'new-group'), button(t('Labels'), () => { mode = 'labels'; render(); }, 'labels'));
     const undo = button(t('Undo organization'), () => run({}, true), 'undo'); undo.disabled = !canUndo; tools.append(undo);
@@ -233,19 +260,23 @@ function createNotesTree({ api, t, locale, currentBook, canManage, openNote, cre
       const rows = domain.visibleTree(index, state().expanded, locale());
       if (!rows.some((row) => row.item.id === selected)) selected = rows[0]?.item.id || null;
       rows.forEach((value, at) => {
-        const row = el('div', undefined, 'custom-note-row'); row.dataset.itemId = value.item.id; row.dataset.kind = value.kind; row.setAttribute('role', 'treeitem');
-        row.setAttribute('aria-level', value.depth + 1); row.setAttribute('aria-selected', String(selected === value.item.id)); row.style.paddingInlineStart = (value.depth * 16 + 6) + 'px'; row.tabIndex = selected === value.item.id ? 0 : -1;
+        const row = el('div', undefined, 'nav-item notes-item custom-note-row'); row.dataset.itemId = value.item.id; row.dataset.kind = value.kind; row.setAttribute('role', 'treeitem');
+        row.setAttribute('aria-level', value.depth + 1); row.setAttribute('aria-selected', String(selected === value.item.id)); row.style.paddingInlineStart = (value.depth * 14 + 18) + 'px';
+        row.classList.toggle('current', value.kind === 'note' && activeNote?.() === value.item.id); row.tabIndex = selected === value.item.id ? 0 : -1;
         const siblings = domain.sortedChildren(index, value.item.parentId, locale()); row.setAttribute('aria-setsize', siblings.length); row.setAttribute('aria-posinset', siblings.findIndex((n) => n.id === value.item.id) + 1);
         if (value.kind === 'group') row.setAttribute('aria-expanded', String(state().expanded.has(value.item.id)));
-        row.append(el('span', value.kind === 'group' ? state().expanded.has(value.item.id) ? '▾' : '▸' : '', 'custom-note-disclosure'), el('span', labelFor(value.item), 'custom-note-title'));
-        if (value.kind === 'note') { const names = value.item.labelIds.map((id) => index.labels.find((l) => l.id === id)?.name).filter(Boolean); if (names.length) row.append(el('span', names.join(', '), 'custom-note-labels')); }
+        const line = el('div', undefined, 'n-row'); row.append(line);
+        line.append(el('span', value.kind === 'group' ? state().expanded.has(value.item.id) ? '▾' : '▸' : '', 'custom-note-disclosure'), el('span', labelFor(value.item), 'n-label custom-note-title'));
+        if (value.kind === 'note') { const names = value.item.labelIds.map((id) => index.labels.find((l) => l.id === id)?.name).filter(Boolean); if (names.length) line.append(el('span', names.join(', '), 'n-words custom-note-labels')); }
         row.addEventListener('click', () => { if (value.kind === 'group') { const expanded = state().expanded; expanded.has(value.item.id) ? expanded.delete(value.item.id) : expanded.add(value.item.id); select(value.item.id); } else open(value.item.id).catch(error); });
         row.addEventListener('focus', () => { selected = value.item.id; state().selected = selected; });
         row.addEventListener('keydown', (e) => keydown(e, rows, at));
         if (canManage()) {
           row.draggable = true;
           const menu = button(t('Organize'), () => { selected = value.item.id; mode = 'item'; render(); root.querySelector('.custom-notes-form input')?.focus(); }, 'organize');
-          menu.tabIndex = -1; menu.addEventListener('click', (e) => e.stopPropagation()); row.append(menu);
+          menu.textContent = '⋯'; menu.title = t('Organize'); menu.setAttribute('aria-label', t('Organize'));
+          menu.tabIndex = -1; menu.addEventListener('click', (e) => e.stopPropagation()); line.append(menu);
+          row.addEventListener('contextmenu', (e) => showContextMenu(e, value.item, row).catch(error));
           row.addEventListener('dragstart', (e) => { dragId = value.item.id; selected = dragId; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('application/x-neo-note', dragId); });
           row.addEventListener('dragover', (e) => dragOver(e, row));
           row.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); const request = dropTarget === row ? drop : null; drop = null; dropTarget = null; dragId = null; if (request) run(request).catch(error); });
