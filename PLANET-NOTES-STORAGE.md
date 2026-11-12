@@ -116,3 +116,26 @@ must retain pending editor text rather than treat these errors as successful sav
 This guard does not guess completion of historical ancestors that had already
 advanced before the guard existed. Such ambiguous operations remain explicit
 recovery cases. No revision or transaction-record retention policy was changed.
+
+## Unchanged metadata during body reads
+
+The store's internal `loadReadOnly()` rereads `index.json` through the checked
+adapter on every call. When its exact bytes equal the last successfully validated
+text, it reuses a deeply immutable parsed snapshot. Changed bytes always pass the
+full runtime validator; missing and unavailable reads bypass the cache. Only one
+validated document is retained per store. This is not a filesystem stamp cache.
+
+The existing `load()` still returns a fresh editable copy. The observer uses the
+read-only snapshot, and the public service load returns a caller-owned copy, so
+neither UI code nor a caller can mutate the observer's comparison baseline. Body
+reads retain the reconciled metadata baseline and durably observe successful
+bodies without subsequently adopting an unexamined metadata head. Revisions,
+competing-body preservation and native durability ordering remain unchanged.
+
+Refresh first performs a nonrecursive notes-root listing to detect unindexed HTML.
+Without candidates, it refreshes only the open body; it does not run the expensive
+collection-wide orphan transaction on every focus/poll. If a candidate exists,
+the original full recovery transaction and its validation still run. A root file
+arriving just after enumeration is discovered at a later focus/poll; files are
+never deleted or renamed by the preflight. Root placeholder/unsafe-entry refusal
+remains in force. Nested recovery files are not orphan candidates.

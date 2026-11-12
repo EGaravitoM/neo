@@ -120,23 +120,39 @@ async function run() {
   // exercising the real explorer DOM, event handlers and search implementation.
   await js(`(async () => {
     const fixtureBook='book-regressions'; const chapter={bookId:fixtureBook,kind:'chapter',chapterId:'ch-first'};
-    let live=[]; let metadataStatus='ok'; let throwCloud=false;
+    let live=[]; let metadataStatus='ok'; let throwCloud=false; let closePreviewTask=Promise.resolve();let noteReadTask=null;
     const metadata={schemaVersion:1,versionId:'v-fixture',parentVersionIds:[],root:{sortMode:'alphabetical',childOrder:['n-fixture']},groups:[],notes:[{id:'n-fixture',title:'Mara',parentId:null,labelIds:['l-old'],createdAt:'2026-11-11T10:00:00.000Z'}],labels:[{id:'l-old',name:'plot'}],tombstones:[]};
     const errors=[];const api={
       notesCapabilities:async()=>({enabled:true}),
       notesLoad:async()=>{if(throwCloud)throw Object.assign(new Error('Cloud unavailable'),{code:'ECLOUD'});return metadataStatus==='ok'?{status:'ok',index:structuredClone(metadata)}:{status:metadataStatus};},
-      notesRead:async()=>({status:'ok',html:'<p>Orchard</p>'}),
+      notesRead:async()=>noteReadTask||({status:'ok',html:'<p>Orchard</p>'}),
       notesReadLegacy:async(_book,{page})=>page==='book'?{status:'ok',html:'<p>Local legacy reference</p>'}:{status:'missing'}
     };
     const host=document.createElement('aside');document.body.append(host);
     const explorer=NeoPlanetNotesExplorer.createNotesExplorer({api,t:NeoI18n.t,locale:()=> 'en',currentBook:()=>fixtureBook,
       catalogLegacy:()=>[{document:{kind:'book'},title:'The Book'},{document:{kind:'chapter',chapterId:'ch-first'},title:'First chapter'}],
-      liveDocuments:()=>live,currentDocument:()=>null,editorRoot:()=>null,openDocument:async()=>{},preview:async()=>{},closePreview:async()=>{},flush:async()=>{},dataChanged:async()=>{},onMode:()=>{},onError:error=>errors.push(error)});
+      liveDocuments:()=>live,currentDocument:()=>null,editorRoot:()=>null,openDocument:async()=>{},preview:async()=>{},closePreview:()=>closePreviewTask,flush:async()=>{},dataChanged:async()=>{},onMode:()=>{},onError:error=>errors.push(error)});
     await explorer.mount(host,fixtureBook);
     const action=async(name)=>{explorer.root.querySelector('[data-explorer-action="'+name+'"]').click();await new Promise(resolve=>setTimeout(resolve,0));await explorer.settled();};
     const query=(value)=>{const input=explorer.root.querySelector('[data-notes-search="query"]');input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));};
     const count=()=>explorer.root.querySelectorAll('.notes-search-result').length;
     const check=(value,message)=>{if(!value)throw new Error(message);};
+    // A pending preview close belongs to the transition. settled must wait,
+    // and closing search before it finishes must cancel its late continuation.
+    let releasePreview;closePreviewTask=new Promise(resolve=>{releasePreview=resolve;});
+    explorer.root.querySelector('[data-explorer-action="search"]').click();await Promise.resolve();await Promise.resolve();
+    let premature=false;const opening=explorer.settled().then(()=>{premature=true;});
+    await Promise.resolve();await Promise.resolve();check(!premature,'settled resolved before preview closure');
+    explorer.root.querySelector('[data-explorer-action="close"]').click();await Promise.resolve();await Promise.resolve();
+    releasePreview();await opening;await explorer.settled();closePreviewTask=Promise.resolve();
+    check(!explorer.isOpen()&&!explorer.root.querySelector('[data-notes-search="query"]'),'Abandoned search restarted after closing');
+    let finishRead;noteReadTask=new Promise(resolve=>{finishRead=resolve;});
+    explorer.root.querySelector('[data-explorer-action="search"]').click();await new Promise(resolve=>setTimeout(resolve,30));
+    check(![...explorer.root.querySelectorAll('.notes-search-result .n-label')].some(label=>label.textContent==='Mara'),'Empty All view eagerly rendered pending placeholders');
+    check(explorer.root.querySelector('.notes-explorer-status').textContent.includes('incomplete'),'Pending note coverage was hidden');
+    live=[{document:{bookId:fixtureBook,kind:'custom',noteId:'n-fixture'},html:'<p>Immediate live words</p>'}];explorer.edited();
+    check([...explorer.root.querySelectorAll('.notes-search-result .n-label')].some(label=>label.textContent==='Mara'),'Live writing should appear before the body read settles');
+    finishRead({status:'ok',html:'<p>Orchard</p>'});await explorer.settled();noteReadTask=null;live=[];await action('close');
     await action('search');query('dragon');check(count()===0,'Unwritten chapter should not invent a saved match');
     live=[{document:chapter,html:'<p>Unsaved dragon writing</p>'}];explorer.edited();
     check(count()===1,'Missing-file chapter must match live writing after hydration');
@@ -161,6 +177,14 @@ async function run() {
     await action('close');explorer.detach();metadataStatus='unavailable';await explorer.mount(host,fixtureBook);
     await action('search');query('local legacy');check(count()===1,'Initial cloud failure must not require a cached index');
     check(explorer.root.querySelector('.notes-explorer-status').textContent.includes('incomplete'),'Initial unknown collection keeps coverage incomplete');
+    await action('close');metadataStatus='ok';
+    for(let i=0;i<5;i++){const extra={...metadata.notes[0],id:'n-extra'+i,title:'Extra '+i};metadata.notes.push(extra);metadata.root.childOrder.push(extra.id);}
+    await action('search');query('');
+    const retained=[...explorer.root.querySelectorAll('.notes-search-result')].find(row=>row.querySelector('.n-label').textContent==='Mara');
+    check(count()>2&&!!retained,'Bulk-result fixture is incomplete');retained.focus();query('Mara');
+    check(count()===1&&explorer.root.querySelector('.notes-search-result')===retained,'Large result reduction replaced retained identity');
+    check(document.activeElement===retained,'Bulk result reduction lost keyboard focus');
+    query('nothing_matches_here');check(count()===0,'Empty reduction left stale results');
     explorer.detach();host.remove();
   })()`);
   console.log('PASS: unsaved first chapter notes, deleted/merged filter cleanup, partial cloud coverage and retry');

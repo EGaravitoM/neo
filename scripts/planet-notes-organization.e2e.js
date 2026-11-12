@@ -61,6 +61,7 @@ async function run() {
   await click('.custom-notes-form button[type="submit"]'); await until(() => index()?.notes.length === 1 && index().notes[0].parentId === nested);
   const noteId = index().notes[0].id;
   await until(() => js(`document.getElementById('aux-editor').dataset.customNoteId===${JSON.stringify(noteId)}`));
+  assert.equal(await js(`document.querySelectorAll('#notes-nav > .notes-item.current').length`), 0, 'Legacy notes must not remain marked current while a Custom Note is open');
   await js(`document.getElementById('aux-editor').focus()`); await win.webContents.insertText('Writing to preserve');
   await js('customNotesController.flush()');
   const bodyPath = path.join(library, book.id, 'notes', noteId + '.html');

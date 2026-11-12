@@ -14,7 +14,7 @@ const required = (r) => {
 /** Runs inside the service's book queue. Observations are immutable evidence,
  * not a second source of truth. Polls never rewrite unchanged canonical files. */
 function createNotesObserver({ adapter, store, makeId, now }) {
-  let localIndex = null;
+  let localIndex = null; let localIndexToken = null;
   const artifact = async (path, text) => {
     const previous = await adapter.read(path);
     if (previous.status === 'missing') await adapter.writeDurable(path, text);
@@ -38,10 +38,10 @@ function createNotesObserver({ adapter, store, makeId, now }) {
     await artifact(path + '.json', json({ schemaVersion: 1, id, noteId, operationId: 'o-observed-' + await hash(html), createdAt: now(), reason: 'external', writingDay: null, bodyHash: await hash(html) }));
   };
   const remember = async () => {
-    const loaded = await store.load();
+    const loaded = await store.loadReadOnly();
     if (loaded.status === 'ok') {
       await artifact('recovery/index-versions/' + loaded.index.versionId + '.json', json(loaded.index));
-      localIndex = loaded.index;
+      localIndex = loaded.index; localIndexToken = loaded.indexToken;
     }
     return loaded;
   };
@@ -62,10 +62,10 @@ function createNotesObserver({ adapter, store, makeId, now }) {
     return result;
   };
   const metadata = async () => {
-    const incoming = await store.load();
+    const incoming = await store.loadReadOnly();
     if (incoming.status !== 'ok') return incoming;
     if (!localIndex) return remember();
-    if (json(incoming.index) === json(localIndex)) return incoming;
+    if (incoming.indexToken === localIndexToken || json(incoming.index) === json(localIndex)) { localIndexToken = incoming.indexToken; return incoming; }
     if (incoming.index.versionId === localIndex.versionId) throw fail('EINVAL', 'Changed metadata reused a version identity');
     await artifact('recovery/index-versions/' + incoming.index.versionId + '.json', json(incoming.index));
     const left = await ancestors(localIndex); const right = await ancestors(incoming.index);
@@ -83,11 +83,17 @@ function createNotesObserver({ adapter, store, makeId, now }) {
     return remember();
   };
   const refresh = async (noteId, { baseBodyToken, localHtml }) => {
-    await metadata();
-    let loaded = required(await store.load());
-    const orphans = await store.recoverOrphans({ operationId: makeId('o'), versionId: makeId('v'), createdAt: now(), expectedIndexToken: loaded.indexToken });
-    if (!['saved', 'unchanged'].includes(orphans.status)) return orphans;
-    if (orphans.status === 'saved') { await remember(); loaded = required(await store.load()); }
+    let loaded = required(await metadata());
+    // Most polls have no new root HTML. Do not run a collection-wide recovery
+    // transaction (and read every indexed body) just to refresh one open note.
+    // If any candidate exists, the existing full recovery/validation still runs.
+    const indexed = new Set(loaded.index.notes.map(note => note.id + '.html'));
+    const candidates = (await adapter.list('', false)).some(name => name !== '.html' && name.endsWith('.html') && !/[/\\\0]/.test(name) && !indexed.has(name));
+    if (candidates) {
+      const orphans = await store.recoverOrphans({ operationId: makeId('o'), versionId: makeId('v'), createdAt: now(), expectedIndexToken: loaded.indexToken });
+      if (!['saved', 'unchanged'].includes(orphans.status)) return orphans;
+      if (orphans.status === 'saved') { await remember(); loaded = required(await store.load()); }
+    }
     const note = loaded.index.notes.find((n) => n.id === noteId);
     if (!note) {
       const deletion = [...loaded.index.tombstones].reverse().find((t) => t.id === noteId);

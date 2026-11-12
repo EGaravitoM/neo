@@ -65,9 +65,16 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
     const focused = results.contains(document.activeElement) ? document.activeElement.closest('[data-result-key]')?.dataset.resultKey : null;
     const value = model.query({ text: queryText, scope, labelIds: [...selectedLabels], live: liveDocuments(owner) });
     reportCoverage({ ...value.coverage, unavailable: value.coverage.unavailable + Number(metadataUnavailable), complete: value.coverage.complete && !metadataUnavailable, results: value.results.length });
+    // The initial empty All view fills with available results. Coverage still
+    // counts every pending body; explicit queries/filters retain known-title
+    // matches, and unavailable notes remain visible rather than becoming blanks.
+    const displayed = queryText.trim() || scope !== 'all' || selectedLabels.size ? value.results : value.results.filter(result => result.status !== 'loading');
+    // Batch initial population and large reductions in one attached-DOM update.
+    // Retained rows keep their handlers/state; focus is restored below if moved.
+    const batch = !results.childElementCount || results.childElementCount > displayed.length * 2 ? document.createDocumentFragment() : null;
     const existing = new Map([...results.children].map(row => [row.dataset.resultKey, row]));
     let cursor = results.firstElementChild;
-    for (const result of value.results) {
+    for (const result of displayed) {
       const key = search.key(result.document); let row = existing.get(key); let entry;
       if (row) entry = resultRows.get(row);
       else {
@@ -85,10 +92,12 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
       }
       entry.result = result;
       for (const [element, text] of [[entry.title, result.title || t('Untitled')], [entry.location, result.location || result.groupPath || t('Top level')], [entry.excerpt, result.status === 'ok' ? result.excerpt : t('This note is not available on this device yet.')]]) if (element.textContent !== text) element.textContent = text;
-      if (row !== cursor) results.insertBefore(row, cursor);
-      cursor = row.nextElementSibling; existing.delete(key);
+      if (batch) batch.append(row);
+      else { if (row !== cursor) results.insertBefore(row, cursor); cursor = row.nextElementSibling; }
+      existing.delete(key);
     }
-    for (const row of existing.values()) row.remove();
+    if (batch) results.replaceChildren(batch);
+    else for (const row of existing.values()) row.remove();
     if (focused && document.activeElement?.dataset.resultKey !== focused) [...results.children].find(row => row.dataset.resultKey === focused)?.focus();
   };
   const scheduleHydrationRender = (book, turn) => {
@@ -271,12 +280,19 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
       area.append(node('div', undefined, 'notes-recovery-list'), node('div', undefined, 'notes-recovery-actions'));
     }
   };
-  const setMode = async (value) => {
+  const setMode = (value) => {
     generation++; navigation++; cancelHydrationRender(); clearHighlights(); mode = value;
+    const book = owner; const turn = generation;
     onMode(!!mode); render();
-    if (!mode) { await closePreview(true); return; }
-    if (mode === 'search') { await closePreview(true); loadTask = startSearch(); await loadTask; }
-    else { loadTask = loadRecovery(); await loadTask; }
+    // settled() must include asynchronous preview closure, not the previous
+    // search's completed promise. Abandoned transitions cannot restart loading.
+    loadTask = (async () => {
+      if (!value || value === 'search') await closePreview(true);
+      if (!sameOwner(book, turn) || mode !== value) return;
+      if (value === 'search') await startSearch();
+      else if (value) await loadRecovery();
+    })();
+    return loadTask;
   };
   return {
     root,

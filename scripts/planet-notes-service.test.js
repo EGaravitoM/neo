@@ -254,3 +254,33 @@ test('deletion racing with unsaved editor text produces an active recovered note
   assert.equal((await ctx.store.read(result.noteId)).html, '<p>Still writing</p>');
   assert.equal((await ctx.store.readTrash('t-deleted')).html, before.html);
 });
+
+test('body observation cannot silently adopt metadata that arrives during a read', async () => {
+  const d = fixture(); const note = await d.service.create('book-one', create());
+  const ctx = d.books.get('book-one');
+  const before = JSON.parse(ctx.files.get('index.json'));
+  const external = structuredClone(before); external.versionId = 'v-unrelated-head'; external.parentVersionIds = [];
+  external.notes[0].title = 'Competing organization';
+  const read = ctx.adapter.read; let changed = false;
+  ctx.adapter.read = async path => {
+    const result = await read(path);
+    if (!changed && path === note.noteId + '.html') { changed = true; ctx.files.set('index.json', JSON.stringify(external)); }
+    return result;
+  };
+  assert.equal((await d.service.read('book-one', note.noteId)).status, 'ok');
+  // A later read must reconcile the newly observed head, rather than having
+  // silently remembered it after the body read without checking ancestry.
+  await assert.rejects(d.service.load('book-one'), { code: 'ECONFLICT' });
+});
+
+
+test('refresh without orphan candidates reads the active body without traversing unrelated writing', async () => {
+  const d = fixture(); const first = await d.service.create('book-one', create('o-first'));
+  const second = await d.service.create('book-one', create('o-second'));
+  const body = await d.service.read('book-one', first.noteId); const ctx = d.books.get('book-one');
+  const originalRead = ctx.adapter.read; let unrelatedReads = 0;
+  ctx.adapter.read = async path => { if (path === second.noteId + '.html') { unrelatedReads++; return { status: 'unavailable' }; } return originalRead(path); };
+  const result = await d.service.refresh('book-one', first.noteId, { baseBodyToken: body.bodyToken, localHtml: body.html });
+  assert.equal(result.status, 'ok'); assert.equal(unrelatedReads, 0);
+  assert.equal((await ctx.store.load()).index.notes.length, 2);
+});

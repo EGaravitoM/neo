@@ -8300,6 +8300,9 @@ async function prepareCustomNotes(inspector) {
         copy.hidden = !state.canCopy || capabilities.canManage === false;
         ed.hidden = false; auxDirty = false;
         $('#aux-title').textContent = state.title || t('Untitled');
+        // A Custom Note owns the page; the legacy Book/Chapter entry must not
+        // remain highlighted from the previous page.
+        document.querySelectorAll('#notes-nav > .notes-item.current').forEach(row => row.classList.remove('current'));
         if ($('#notes-outline')) $('#notes-outline').hidden = true;
         if ($('#notes-up')) $('#notes-up').hidden = true;
         if ($('#notes-side')) $('#notes-side').innerHTML = '';

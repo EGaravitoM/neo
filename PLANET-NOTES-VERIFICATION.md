@@ -42,10 +42,12 @@ now awaits the actual pending promise before asserting a stable-source copy;
 no production conflict check was relaxed. The isolated rerun passes. A legacy
 Notes pane-pin timeout during concurrent windows passed on isolated rerun (14/14).
 
-The final explorer regression also timed out once while reopening search after
-navigation. Its isolated rerun passed all cases. Both logs are retained and test
-synchronization remains an open finding in the release report; the rerun does not
-prove the timeout impossible.
+The explorer timeout investigation found that `settled()` could return the
+previous load while a recovery preview was still closing. The full transition now
+owns its promise and checks its generation before starting a new load. A
+controlled pending-preview regression proves that settlement waits and abandoned
+search cannot restart; three repeated complete explorer runs pass. Earlier failed
+logs remain evidence of the issue, not current successful verification.
 
 ## Reproducible profiles
 
@@ -175,7 +177,7 @@ npm run test:custom-notes-app-stress -- --case wide-10000 --out stress-results/a
 
 The domain campaign after the fixes is `stage7-domain-final.json` (all seven
 profiles × three samples, durable failure boundaries, unavailable inputs and
-repeated observed conflicts). The Node suite passes **629 tests**. Planet Notes
+repeated observed conflicts). The Node suite passes **635 tests**. Planet Notes
 lint and `git diff --check` pass. Whole-repository lint still reports pre-existing
 findings outside this change; it is not reported as a clean global gate.
 
@@ -213,7 +215,7 @@ No responsiveness threshold or product limit is inferred from a functional pass.
 Fresh artifacts use `ui-<profile>-review-fixed.json`;
 `app-smoke-review-clean.json` passes and `app-smoke-review-injected.json` fails
 intentionally with the injected error recorded. Previous evidence remains intact.
-The review adds four regression tests; the complete Node suite passes 629 tests.
+The review adds four regression tests; the complete Node suite passes 635 tests.
 Release readiness remains false until the previously recorded open findings and
 manual/native gates are addressed.
 
@@ -232,3 +234,83 @@ Observed maximum scheduled input delivery delays in the review-fixed run:
 These are one instrumented run per profile. Probe scheduling adds overhead; do
 not treat these as hardware latency or a statistical tail-latency guarantee. The
 measured stalls reinforce the existing open performance finding.
+
+## Final-stage follow-up
+
+- The tree retains attached rows with stable identity instead of rebuilding all
+  listeners on each expansion. Row actions read current item/position data;
+  management controls update when capabilities change. Exact End navigation and
+  row identity preservation pass on all seven profiles. In the latest run,
+  cumulative wide-10,000 expansion fell from 38.6 to 8.7 seconds, with maximum
+  expansion input delay about 194 ms; mixed-3,000 fell from 27.4 to 6.0 seconds.
+  Deep-5,000 still records a 333 ms expansion delay. These remain observations for
+  performance review, not imposed limits or automatic acceptance thresholds.
+- Repeated body reads no longer reload/adopt metadata after observing a body.
+  Read-only metadata snapshots reuse parsing and validation only after exact-byte
+  rereads establish unchanged input. Deep freezing protects the baseline while
+  public loads retain caller-owned copies. Regression tests cover external heads
+  arriving during body reads, cloud availability, changed invalid bytes and
+  attempted snapshot mutation. No observed body is returned without preservation.
+- Visual inspection exposed a stale Book/Chapter current marker while a Custom
+  Note was active. It is cleared when presenting the Custom Note; organization
+  integration checks that a legacy entry is not simultaneously marked current.
+- Actual desktop smoke inspection captures named searchbox/tree/treeitem roles
+  through Chromium's accessibility tree and Night/Paper/Light screenshots under
+  `stress-results/release-ui-inspection-final/`. These are automated role checks
+  and desktop visual observations, not a manual screen-reader pass or native
+  mobile certification. Existing UI/body font inheritance remains unchanged.
+- Node tests: 635 passed. Full domain/fault/conflict campaign is
+  `stage7-release-domain-final.json`; final renderer profiles use
+  `ui-<profile>-release-final.json`. Explorer transition repeats are
+  `explorer-transition-repeat-0.log` through `-2.log`. Updated editor/Pocket/disabled
+  regressions use `*-immutable-final.log`; organization and legacy Notes also have
+  `*-release-final.log`.
+- Native availability was rechecked: Android has no attached device and no
+  emulator binary at the conventional SDK path; iOS Simulator SDK is absent.
+  Installation and physical-device/cloud/suspension checks remain outstanding.
+
+The app driver now accepts `--timeout-ms` to collect an actual cold-load duration
+beyond the default two-minute budget. A longer run never erases the original
+120-second failure or establishes acceptable responsiveness. No size/nesting cap
+or release gate was relaxed.
+
+Orphan-refresh profiling also found that every open-note focus refresh ran a full
+collection-wide orphan transaction even without unindexed root HTML. A root-only
+preflight now avoids unrelated body reads when no candidate exists; actual orphan
+candidates still enter the existing validated recovery path. Tests cover unrelated
+unavailable writing, root placeholders, nonrecursive desktop/Pocket enumeration,
+real orphan discovery and preservation of missing indexed notes. This does not
+weaken native durable writes or replace unavailable files with empty results.
+
+The final search follow-up batches initial populations and large reductions in
+attached DOM. Blank All search fills with available results while pending coverage
+remains explicit, avoiding thousands of initial loading-placeholder rows. Explicit
+queries/filters retain known metadata matches; unsaved live results appear before
+the read settles. A deferred-body regression checks these cases and a bulk-result
+reduction checks retained identity, keyboard focus and removal of stale results.
+
+A final two-axis read-only review of Task 7 and the follow-up working diff found
+zero actionable Standards findings and zero actionable Spec findings. That review
+does not close native, manual screen-reader or performance acceptance gates.
+
+### Final cold-load observation
+
+The final actual-app/IPC/storage run (`app-wide-10000-incremental-results.json`)
+completed all 10,000 notes within an explicit 360-second test budget. First matching
+results appeared in **322 ms** and full cold hydration finished in **179.1 seconds**.
+Adapter diagnostics attribute **116.5 seconds** to 10,001 durable observation
+writes. Queue-inclusive service timings overlap and must not be summed with
+adapter timings as independent wall time. Five post-load query dispatches measured
+about **6.9–7.9 ms** across IPC. These are single-run observations, not guarantees.
+
+The prior bulk-DOM run took 35.7 seconds to its first result and 215.7 seconds to
+full hydration. Available-first blank results remove that initial placeholder wall
+while keeping incomplete coverage explicit. Earlier 120-second failures remain in
+the record. Completion with a longer budget does **not** establish acceptable cold
+loading or implicitly authorize a size cap. Performance acceptance remains open.
+
+At 1,000 notes, the profiled read-only/preflight path completed cold hydration in
+17.0 seconds, versus the earlier 38.3 seconds after scoped listings alone. First
+results appeared in 435 ms. The full 635-test Node suite and latest full domain,
+fault and conflict campaign pass. Native device and manual screen-reader checks
+remain unavailable/outstanding, so ordinary-user enablement stays off.

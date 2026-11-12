@@ -5,6 +5,7 @@ const domain = globalThis.NeoPlanetNotesOrganization;
 /** Notes-only navigation. All persistence uses domain bridge commands. */
 function createNotesTree({ api, t, locale, currentBook, canManage, openNote, createNote, flushEditor, removeOpenNote, activeNote, titleChanged, contextMenu, onError }) {
   const root = document.createElement('section'); root.id = 'custom-notes-nav';
+  let treeView = null; const renderedRows = new Map();
   const sessions = new Map(); let bookId = null; let index = null; let selected = null; let generation = 0;
   let busy = false; let pending = null; let canUndo = false; let dragId = null; let drop = null; let dropTarget = null; let mode = null; let renderedFormKey = null;
   const state = () => {
@@ -245,18 +246,21 @@ function createNotesTree({ api, t, locale, currentBook, canManage, openNote, cre
     const draft = renderedFormKey === formKey ? oldFields.map((field) => ({ value: field.value, checked: field.checked })) : null;
     const activeField = oldFields.indexOf(document.activeElement);
     const focused = root.contains(document.activeElement) ? document.activeElement.closest('[data-item-id]')?.dataset.itemId : null;
-    root.replaceChildren();
-    const header = el('div', undefined, 'custom-notes-header ns-label'); header.append(el('h3', t('Custom Notes'))); root.append(header);
+    // Retain the attached tree and its unchanged rows; expansion must not rebuild
+    // thousands of listeners or detach the entire navigation from the document.
+    for (const child of [...root.children]) if (child !== treeView || !index) child.remove();
+    if (!index) { treeView = null; renderedRows.clear(); }
+    const header = el('div', undefined, 'custom-notes-header ns-label'); header.append(el('h3', t('Custom Notes'))); root.insertBefore(header, treeView);
     const tools = el('div', undefined, 'custom-notes-tools'); tools.hidden = !canManage();
     tools.append(button(t('New note'), () => { mode = 'note'; render(); }, 'new-note'), button(t('New group'), () => { mode = 'group'; render(); }, 'new-group'), button(t('Labels'), () => { mode = 'labels'; render(); }, 'labels'));
     const undo = button(t('Undo organization'), () => run({}, true), 'undo'); undo.disabled = !canUndo; tools.append(undo);
     const retryButton = button(t('Retry'), retry, 'retry'); retryButton.hidden = !pending; tools.append(retryButton); header.append(tools);
-    const status = el('p', '', 'custom-notes-status'); status.setAttribute('role', 'status'); root.append(status);
+    const status = el('p', '', 'custom-notes-status'); status.setAttribute('role', 'status'); root.insertBefore(status, treeView);
     if (index) {
       const selectedItem = item();
       const path = el('p', selectedItem ? location(group(selectedItem.id) ? selectedItem.id : selectedItem.parentId) : '', 'custom-notes-path');
-      path.hidden = !selectedItem; root.append(path);
-      const tree = el('div'); tree.className = 'custom-notes-tree'; tree.setAttribute('role', 'tree'); tree.setAttribute('aria-label', t('Custom Notes')); root.append(tree);
+      path.hidden = !selectedItem; root.insertBefore(path, treeView);
+      const tree = treeView || el('div'); treeView = tree; tree.className = 'custom-notes-tree'; tree.setAttribute('role', 'tree'); tree.setAttribute('aria-label', t('Custom Notes')); if (tree.parentElement !== root) root.append(tree);
       const rows = domain.visibleTree(index, state().expanded, locale());
       if (!rows.some((row) => row.item.id === selected)) selected = rows[0]?.item.id || null;
       // Visual indentation must leave space for the title at any logical depth.
@@ -264,31 +268,43 @@ function createNotesTree({ api, t, locale, currentBook, canManage, openNote, cre
       const paneWidth = root.clientWidth || root.parentElement?.clientWidth || 248;
       const uiSize = parseFloat(getComputedStyle(root).fontSize) || 13;
       const maxIndent = Math.max(18, Math.min(paneWidth / 2, paneWidth - uiSize * 16));
+      const retained = new Set(); let cursor = tree.firstElementChild;
+      const attribute = (node, name, value) => { if (node.getAttribute(name) !== String(value)) node.setAttribute(name, value); };
+      const text = (node, value) => { if (node.textContent !== value) node.textContent = value; };
       rows.forEach((value, at) => {
-        const row = el('div', undefined, 'nav-item notes-item custom-note-row'); row.dataset.itemId = value.item.id; row.dataset.kind = value.kind; row.setAttribute('role', 'treeitem');
-        row.setAttribute('aria-level', value.depth + 1); row.setAttribute('aria-selected', String(selected === value.item.id)); row.style.paddingInlineStart = Math.min(value.depth * 14 + 18, maxIndent) + 'px';
-        row.classList.toggle('current', value.kind === 'note' && activeNote?.() === value.item.id); row.tabIndex = selected === value.item.id ? 0 : -1;
-        row.setAttribute('aria-setsize', value.setSize); row.setAttribute('aria-posinset', value.posInSet);
-        if (value.kind === 'group') row.setAttribute('aria-expanded', String(state().expanded.has(value.item.id)));
-        const line = el('div', undefined, 'n-row'); row.append(line);
-        line.append(el('span', value.kind === 'group' ? state().expanded.has(value.item.id) ? '▾' : '▸' : '', 'custom-note-disclosure'), el('span', labelFor(value.item), 'n-label custom-note-title'));
-        if (value.kind === 'note') { const names = value.item.labelIds.map((id) => index.labels.find((l) => l.id === id)?.name).filter(Boolean); if (names.length) line.append(el('span', names.join(', '), 'n-words custom-note-labels')); }
-        row.addEventListener('click', () => { if (value.kind === 'group') { const expanded = state().expanded; expanded.has(value.item.id) ? expanded.delete(value.item.id) : expanded.add(value.item.id); select(value.item.id); } else open(value.item.id).catch(error); });
-        row.addEventListener('focus', () => { selected = value.item.id; state().selected = selected; });
-        row.addEventListener('keydown', (e) => keydown(e, rows, at));
-        if (canManage()) {
-          row.draggable = true;
-          const menu = button(t('Organize'), () => { selected = value.item.id; mode = 'item'; render(); root.querySelector('.custom-notes-form input')?.focus(); }, 'organize');
-          menu.textContent = '⋯'; menu.title = t('Organize'); menu.setAttribute('aria-label', t('Organize'));
-          menu.tabIndex = -1; menu.addEventListener('click', (e) => e.stopPropagation()); line.append(menu);
-          row.addEventListener('contextmenu', (e) => showContextMenu(e, value.item, row).catch(error));
-          row.addEventListener('dragstart', (e) => { dragId = value.item.id; selected = dragId; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('application/x-neo-note', dragId); });
+        let entry = renderedRows.get(value.item.id);
+        if (!entry) {
+          const row = el('div', undefined, 'nav-item notes-item custom-note-row'); row.dataset.itemId = value.item.id; row.setAttribute('role', 'treeitem');
+          const line = el('div', undefined, 'n-row'); row.append(line);
+          const disclosure = el('span', '', 'custom-note-disclosure'); const title = el('span', '', 'n-label custom-note-title'); const labels = el('span', '', 'n-words custom-note-labels'); line.append(disclosure, title, labels);
+          entry = { row, line, disclosure, title, labels }; renderedRows.set(value.item.id, entry);
+          row.addEventListener('click', () => { const current = entry.value; if (current.kind === 'group') { const expanded = state().expanded; expanded.has(current.item.id) ? expanded.delete(current.item.id) : expanded.add(current.item.id); select(current.item.id); } else open(current.item.id).catch(error); });
+          row.addEventListener('focus', () => { selected = entry.value.item.id; state().selected = selected; });
+          row.addEventListener('keydown', (e) => keydown(e, entry.rows, entry.at));
+          row.addEventListener('contextmenu', (e) => { if (canManage()) showContextMenu(e, entry.value.item, row).catch(error); });
+          row.addEventListener('dragstart', (e) => { if (!manage()) { e.preventDefault(); return; } dragId = entry.value.item.id; selected = dragId; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('application/x-neo-note', dragId); });
           row.addEventListener('dragover', (e) => dragOver(e, row));
           row.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); const request = dropTarget === row ? drop : null; drop = null; dropTarget = null; dragId = null; if (request) run(request).catch(error); });
           row.addEventListener('dragend', () => { dragId = null; drop = null; root.querySelectorAll('[data-drop]').forEach((n) => delete n.dataset.drop); announce(''); });
         }
-        tree.append(row);
+        entry.value = value; entry.rows = rows; entry.at = at; retained.add(value.item.id);
+        const { row, line } = entry;
+        attribute(row, 'data-kind', value.kind); attribute(row, 'aria-level', value.depth + 1); attribute(row, 'aria-selected', selected === value.item.id);
+        const indent = Math.min(value.depth * 14 + 18, maxIndent) + 'px'; if (row.style.paddingInlineStart !== indent) row.style.paddingInlineStart = indent;
+        row.classList.toggle('current', value.kind === 'note' && activeNote?.() === value.item.id); attribute(row, 'tabindex', selected === value.item.id ? 0 : -1);
+        attribute(row, 'aria-setsize', value.setSize); attribute(row, 'aria-posinset', value.posInSet);
+        if (value.kind === 'group') attribute(row, 'aria-expanded', state().expanded.has(value.item.id)); else row.removeAttribute('aria-expanded');
+        text(entry.disclosure, value.kind === 'group' ? state().expanded.has(value.item.id) ? '▾' : '▸' : ''); text(entry.title, labelFor(value.item));
+        const names = value.kind === 'note' ? value.item.labelIds.map((id) => index.labels.find((l) => l.id === id)?.name).filter(Boolean) : [];
+        text(entry.labels, names.join(', ')); entry.labels.hidden = !names.length;
+        const managing = canManage(); row.draggable = managing;
+        if (managing && !entry.menu) {
+          const menu = button(t('Organize'), () => { selected = entry.value.item.id; mode = 'item'; render(); root.querySelector('.custom-notes-form input')?.focus(); }, 'organize');
+          menu.textContent = '⋯'; menu.title = t('Organize'); menu.setAttribute('aria-label', t('Organize')); menu.tabIndex = -1; menu.addEventListener('click', (e) => e.stopPropagation()); line.append(menu); entry.menu = menu;
+        } else if (!managing && entry.menu) { entry.menu.remove(); entry.menu = null; }
+        if (row !== cursor) tree.insertBefore(row, cursor); cursor = row.nextElementSibling;
       });
+      for (const [id, entry] of renderedRows) if (!retained.has(id)) { entry.row.remove(); renderedRows.delete(id); }
       const rootDrop = el('div', t('Top level'), 'custom-notes-root'); rootDrop.hidden = !canManage();
       rootDrop.addEventListener('dragover', (e) => { if (manage() && dragId) { e.preventDefault(); dropTarget = rootDrop; rootDrop.dataset.drop = 'inside'; drop = { action: 'move', itemId: dragId, parentId: null }; announce(t('Move into {destination}', { destination: t('Custom Notes') })); } });
       rootDrop.addEventListener('drop', (e) => { e.preventDefault(); if (dropTarget === rootDrop && drop) run(drop).catch(error); drop = null; dropTarget = null; dragId = null; }); root.append(rootDrop);
@@ -317,7 +333,7 @@ function createNotesTree({ api, t, locale, currentBook, canManage, openNote, cre
       if (!capability.enabled) { root.remove(); return; }
       const changed = bookId !== owner;
       bookId = owner;
-      if (changed) { index = null; selected = state().selected; mode = null; root.replaceChildren(el('p', t('Loading notes…'))); }
+      if (changed) { index = null; treeView = null; renderedRows.clear(); selected = state().selected; mode = null; root.replaceChildren(el('p', t('Loading notes…'))); }
       host.append(root);
       if (await loadIndex(owner, turn)) render();
     },

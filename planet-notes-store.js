@@ -23,13 +23,33 @@ function createNotesStore(adapter) {
   const idCheck = (id) => { if (!model.safeId(id)) throw error('EINVAL', 'Invalid ID'); };
   // Exact source token, not a short collision-prone hash. Kept internal/in memory.
   const token = (text) => text;
-  const load = async () => {
+  let validatedIndexText = null; let validatedSnapshot = null;
+  const loadReadOnly = async () => {
     const r = await adapter.read('index.json');
     if (r.status !== 'ok') return r;
+    // Availability and exact bytes are checked on every call. Only an unchanged
+    // validated document can reuse the immutable snapshot; never trust mtime.
+    if (r.text === validatedIndexText) return validatedSnapshot;
     let index;
     try { index = JSON.parse(r.text); } catch { return { status: 'invalid', issues: ['Invalid JSON'] }; }
     const result = model.validateIndex(index);
-    return result.status === 'ok' ? { ...result, indexToken: r.text } : result;
+    if (result.status !== 'ok') return result;
+    const pending = [index];
+    while (pending.length) {
+      const value = pending.pop();
+      if (!value || typeof value !== 'object' || Object.isFrozen(value)) continue;
+      for (const child of Object.values(value)) if (child && typeof child === 'object') pending.push(child);
+      Object.freeze(value);
+    }
+    validatedIndexText = r.text;
+    validatedSnapshot = Object.freeze({ status: 'ok', index, indexToken: r.text });
+    return validatedSnapshot;
+  };
+  // Existing callers receive a fresh editable snapshot. Read-only observers can
+  // avoid parsing the entire book for every individual body read.
+  const load = async () => {
+    const result = await loadReadOnly();
+    return result.status === 'ok' ? { ...result, index: JSON.parse(result.indexToken) } : result;
   };
   const read = async (id) => {
     idCheck(id);
@@ -294,6 +314,7 @@ function createNotesStore(adapter) {
     readTrash: (trashId) => serial(() => getHistory().readTrash(trashId)),
     restoreTrash: (r) => command('restoreTrash', r),
     restoreRevision: (r) => command('restoreRevision', r),
+    loadReadOnly: () => serial(loadReadOnly),
     load: () => serial(load), read: (id) => serial(() => read(id)), apply: (r) => {
     // Snapshot caller-owned input before the asynchronous queue runs.
     let copy;

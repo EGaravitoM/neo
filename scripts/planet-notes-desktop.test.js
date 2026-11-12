@@ -144,3 +144,14 @@ test('scoped listing rejects unavailable ancestors and placeholder intents', asy
   const blocked = createDesktopNotesAdapter(root, { availability: async (file) => file === path.join(root, 'recovery') ? 'unavailable' : 'local' });
   await assert.rejects(blocked.list('recovery/missing'), { code: 'ECLOUD' });
 });
+
+
+test('root-only discovery avoids recovery traversal while retaining root HTML and cloud refusal', async t => {
+  const { adapter, root } = await fixture(t);
+  await adapter.writeDurable('n-one.html', 'writing'); await adapter.writeDurable('recovery/evidence.html', 'evidence');
+  const guarded = createDesktopNotesAdapter(root, { availability: async file => file.includes('/recovery') ? 'unavailable' : 'local' });
+  assert.deepEqual(await guarded.list('', false), ['n-one.html']);
+  await assert.rejects(guarded.list(), { code: 'ECLOUD' });
+  await adapter.writeDurable('.n-two.html.icloud', '');
+  await assert.rejects(guarded.list('', false), { code: 'ECLOUD' });
+});

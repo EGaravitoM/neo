@@ -228,15 +228,18 @@ function createNotesService({ getBook, enabled = false, makeId = (prefix) => pre
   };
   return {
     capabilities: async () => ({ enabled: !!enabled, canManage: !!enabled, canRestore: !!enabled }),
-    load: async (bookId) => { bookIdentity(bookId); return enabled ? serial(bookId, async (ctx) => { await settleAll(ctx); return observer(ctx).metadata(); }) : { status: 'disabled' }; },
+    load: async (bookId) => { bookIdentity(bookId); return enabled ? serial(bookId, async (ctx) => { await settleAll(ctx); const loaded = await observer(ctx).metadata(); return loaded.status === 'ok' ? { ...loaded, index: clone(loaded.index) } : loaded; }) : { status: 'disabled' }; },
     read: async (bookId, noteId) => {
       active(); bookIdentity(bookId); id(noteId);
       return serial(bookId, async (ctx) => {
-        await settleAll(ctx); await observer(ctx).metadata();
-        const loaded = await ctx.store.load(); if (loaded.status !== 'ok') return loaded;
+        await settleAll(ctx);
+        const loaded = await observer(ctx).metadata(); if (loaded.status !== 'ok') return loaded;
         const note = loaded.index.notes.find((n) => n.id === noteId); if (!note) return { status: 'missing' };
         const body = await ctx.store.read(noteId);
-        if (body.status === 'ok') { await observer(ctx).observe(noteId, body.html); await observer(ctx).remember(); }
+        // Reading/observing a body does not change metadata. Keep the baseline
+        // established by metadata(), rather than reloading and adopting a later
+        // external head that this read has not reconciled.
+        if (body.status === 'ok') await observer(ctx).observe(noteId, body.html);
         return body.status === 'ok' ? { ...body, title: note.title, versionId: loaded.index.versionId } : body;
       });
     },

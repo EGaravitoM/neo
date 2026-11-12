@@ -95,3 +95,18 @@ HTML renders as inert text rather than executable HTML.
 No whole-library scan or persisted search database is introduced. Search reads
 only the open book, in batches of four, so editor saves can enter the queue between
 batches. Large/deep collection performance and cloud failure stress remain Stage 7.
+
+## Large-collection search and transition settlement
+
+The blank All view without label filters fills with available notes rather than
+building a row for every still-loading body immediately. Loading bodies remain in
+coverage totals and the incomplete-coverage notice. Explicit text queries, other
+scopes and exact label filters can still show matches based on known metadata;
+unavailable and missing notes are not silently discarded. Live unsaved content
+is immediately eligible even before its disk read completes.
+
+Initial populations and large result reductions use one attached-DOM update while
+retaining keyed result nodes and restoring focused results when they still match.
+This changes rendering cost, not result identity, search terms or storage.
+`settled()` includes asynchronous preview closure; a transition abandoned through
+close/navigation cannot restart a later search after its preview promise resolves.

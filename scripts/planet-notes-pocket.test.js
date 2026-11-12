@@ -167,3 +167,10 @@ test('Pocket scoped listings retain relative paths and check unavailable ancesto
   await assert.rejects(d.adapter.list('recovery/missing'), { code: 'ECLOUD' });
   await assert.rejects(d.adapter.list('../elsewhere'), { code: 'EINVAL' });
 });
+
+
+test('Pocket root-only discovery does not traverse unrelated recovery', async () => {
+  const d = fixture();d.files.set('book-one/notes/recovery/evidence.html', 'evidence');d.away.add('book-one/notes/recovery');
+  assert.deepEqual(await d.adapter.list('', false), ['n-one.html']);
+  await assert.rejects(d.adapter.list(), { code: 'ECLOUD' });
+});

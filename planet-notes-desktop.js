@@ -104,7 +104,7 @@ function createDesktopNotesAdapter(root, { availability, io = fs.promises } = {}
         try { await io.unlink(file); await syncDir(path.dirname(file)); } catch (err) { if (err.code !== 'ENOENT') throw err; }
       });
     },
-    async list(prefix = '') {
+    async list(prefix = '', recursive = true) {
       await checked('index.json');
       const result = [];
       if (prefix) await checked(prefix);
@@ -122,7 +122,7 @@ function createDesktopNotesAdapter(root, { availability, io = fs.promises } = {}
           const name = relative ? relative + '/' + entry.name : entry.name;
           if (entry.name.endsWith('.icloud')) throw fail('ECLOUD', 'Notes listing is incomplete');
           if (entry.isSymbolicLink()) throw fail('EINVAL', 'Symbolic link in notes');
-          if (entry.isDirectory()) pending.push(name);
+          if (entry.isDirectory()) { if (recursive) pending.push(name); }
           else if (entry.isFile() && !entry.name.endsWith('.tmp')) result.push(name);
           else if (!entry.isFile()) throw fail('EINVAL', 'Nonregular notes file');
         }

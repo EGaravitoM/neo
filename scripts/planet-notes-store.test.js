@@ -257,3 +257,34 @@ test('history writes settle a published core operation whose receipt failed', as
   assert.ok((await store.recover()).every((result) => result.status === 'saved'));
   assert.equal((await store.read('n-mara')).html, '<p>Later writing</p>');
 });
+
+
+test('validated index reuse still checks availability, validates changed bytes and isolates returned snapshots', async () => {
+  const data = disk(); const store = createNotesStore(data.adapter); await store.apply(creation());
+  const validText = data.files.get('index.json'); const first = await store.load();
+  first.index.notes[0].title = 'Only in the caller';
+  assert.notEqual((await store.load()).index.notes[0].title, first.index.notes[0].title);
+  const originalRead = data.adapter.read;
+  data.adapter.read = async path => path === 'index.json' ? { status: 'unavailable' } : originalRead(path);
+  assert.equal((await store.load()).status, 'unavailable');
+  data.adapter.read = originalRead;
+  const broken = JSON.parse(validText); broken.notes[0].parentId = 'g-missing';
+  data.files.set('index.json', JSON.stringify(broken));
+  assert.equal((await store.load()).status, 'invalid');
+  data.files.set('index.json', validText); assert.equal((await store.load()).status, 'ok');
+});
+
+
+test('read-only index snapshots are deeply immutable and never mask changed or unavailable disk data', async () => {
+  const data = disk(); const store = createNotesStore(data.adapter); await store.apply(creation());
+  const first = await store.loadReadOnly();
+  assert.ok(Object.isFrozen(first.index.notes[0]));
+  assert.throws(() => first.index.notes[0].labelIds.push('l-invented'), TypeError);
+  const changed = JSON.parse(data.files.get('index.json')); changed.notes[0].title = 'External rename';
+  data.files.set('index.json', JSON.stringify(changed));
+  const next = await store.loadReadOnly(); assert.equal(next.index.notes[0].title, 'External rename');
+  assert.notEqual(next, first); assert.notEqual(first.index.notes[0].title, next.index.notes[0].title);
+  const originalRead = data.adapter.read;
+  data.adapter.read = async path => path === 'index.json' ? { status: 'unavailable' } : originalRead(path);
+  assert.equal((await store.loadReadOnly()).status, 'unavailable');
+});
