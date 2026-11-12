@@ -1,11 +1,13 @@
 'use strict';
-const { createHash } = require('node:crypto');
-const model = require('./planet-notes');
-const selection = require('./planet-notes-recovery-selection');
-const organization = require('./planet-notes-organization');
+(function () {
+const node = typeof module !== 'undefined' && module.exports;
+const { hash } = node ? require('./planet-notes-history') : globalThis.NeoPlanetNotesHistory;
+const model = node ? require('./planet-notes') : globalThis.NeoPlanetNotes;
+const selection = node ? require('./planet-notes-recovery-selection') : globalThis.NeoPlanetNotesRecoverySelection;
+const organization = node ? require('./planet-notes-organization') : globalThis.NeoPlanetNotesOrganization;
 const json = JSON.stringify;
 const clone = (v) => JSON.parse(json(v));
-const digest = (v) => createHash('sha256').update(json(v)).digest('hex');
+const digest = (v) => hash(json(v));
 const fail = (code, message) => Object.assign(new Error(message), { code });
 const required = (r) => { if (r.status !== 'ok') throw fail(r.status === 'unavailable' ? 'ECLOUD' : r.status === 'missing' ? 'ENOENT' : 'EINVAL', 'Recovery source: ' + r.status); return r; };
 const id = (v) => { if (!model.safeId(v)) throw fail('EINVAL', 'Invalid recovery identity'); };
@@ -14,11 +16,11 @@ const fields = (r, allowed) => { if (!r || typeof r !== 'object' || Array.isArra
 function createLibraryRecovery({ adapter, store, makeId, now, remember }) {
   const commandPath = (op) => 'recovery/view-commands/' + op + '.json';
   const completionPath = (op) => 'recovery/view-completions/' + op + '.json';
-  const decode = (text) => {
+  const decode = async (text) => {
     let envelope;
     try { envelope = JSON.parse(text); } catch { throw fail('EINVAL', 'Invalid recovery journal'); }
     const p = envelope?.plan;
-    if (!p || envelope.digest !== digest(p) || p.schemaVersion !== 1 || !model.safeId(p.request?.operationId) || !['restoreTrash', 'restoreRevision', 'apply'].includes(p.compiled?.method)) throw fail('EINVAL', 'Invalid recovery command');
+    if (!p || envelope.digest !== await digest(p) || p.schemaVersion !== 1 || !model.safeId(p.request?.operationId) || !['restoreTrash', 'restoreRevision', 'apply'].includes(p.compiled?.method)) throw fail('EINVAL', 'Invalid recovery command');
     if (p.compiled.request.operationId !== p.request.operationId) throw fail('EINVAL', 'Recovery identity mismatch');
     return p;
   };
@@ -35,11 +37,11 @@ function createLibraryRecovery({ adapter, store, makeId, now, remember }) {
     let envelope;
     try { envelope = JSON.parse(source.text); } catch { return { status: 'invalid' }; }
     const p = envelope?.plan;
-    if (!p || envelope.digest !== digest(p) || p.request?.operationId !== operationId || !['organize', 'undo'].includes(p.kind) || model.validateIndex(p.after).status !== 'ok' || (p.before !== null && model.validateIndex(p.before).status !== 'ok')) return { status: 'invalid' };
+    if (!p || envelope.digest !== await digest(p) || p.request?.operationId !== operationId || !['organize', 'undo'].includes(p.kind) || model.validateIndex(p.after).status !== 'ok' || (p.before !== null && model.validateIndex(p.before).status !== 'ok')) return { status: 'invalid' };
     try { if (p.kind === 'organize') organization.validateAction(p.request); else if (Object.keys(p.request).some((key) => key !== 'operationId')) return { status: 'invalid' }; } catch { return { status: 'invalid' }; }
     const done = await adapter.read('recovery/organization-completions/' + operationId + '.json');
     if (done.status !== 'ok') return done;
-    if (done.text !== json({ digest: digest(p), status: 'conflict' })) return { status: 'missing' };
+    if (done.text !== json({ digest: await digest(p), status: 'conflict' })) return { status: 'missing' };
     const current = required(await store.load());
     let incoming = current.index;
     const marker = await adapter.read((p.compiled ? 'recovery/abandoned-history/' : 'recovery/abandoned-metadata/') + operationId + '.json');
@@ -96,7 +98,7 @@ function createLibraryRecovery({ adapter, store, makeId, now, remember }) {
     const text = required(source).text;
     let record;
     try { record = JSON.parse(text); } catch { throw fail('EINVAL', 'Invalid recovery completion'); }
-    if (record.digest !== digest(plan) || !['saved', 'conflict'].includes(record.result?.status)) throw fail('EINVAL', 'Recovery completion mismatch');
+    if (record.digest !== await digest(plan) || !['saved', 'conflict'].includes(record.result?.status)) throw fail('EINVAL', 'Recovery completion mismatch');
     return record.result;
   };
   const execute = async (plan) => {
@@ -110,13 +112,13 @@ function createLibraryRecovery({ adapter, store, makeId, now, remember }) {
     } else if (result.status === 'conflict-preserved') result = { status: 'conflict' };
     if (result.status !== 'saved' && result.status !== 'conflict') return result;
     result = { ...result, ...(result.status === 'saved' ? { noteId: plan.noteId } : {}) };
-    await artifact(completionPath(plan.request.operationId), json({ digest: digest(plan), result }));
+    await artifact(completionPath(plan.request.operationId), json({ digest: await digest(plan), result }));
     if (result.status === 'saved') await remember();
     return result;
   };
   const settle = async () => {
     for (const path of (await adapter.list()).filter((p) => /^recovery\/view-commands\/[^/]+\.json$/.test(p)).sort()) {
-      const plan = decode(required(await adapter.read(path)).text);
+      const plan = await decode(required(await adapter.read(path)).text);
       if (commandPath(plan.request.operationId) !== path) throw fail('EINVAL', 'Mismatched recovery journal');
       if (!await completion(plan)) {
         const result = await execute(plan);
@@ -133,7 +135,7 @@ function createLibraryRecovery({ adapter, store, makeId, now, remember }) {
     if (request.kind === 'trash' && request.selections !== undefined) throw fail('EINVAL', 'Unexpected metadata selection');
     const old = await adapter.read(commandPath(request.operationId)); let plan;
     if (old.status === 'ok') {
-      plan = decode(old.text);
+      plan = await decode(old.text);
       if (json(plan.request) !== json(request)) throw fail('EINVAL', 'Recovery operation identity reused');
     } else {
       if (old.status !== 'missing') required(old);
@@ -156,10 +158,13 @@ function createLibraryRecovery({ adapter, store, makeId, now, remember }) {
         compiled = { method: 'apply', request: { operationId: request.operationId, baseVersionId: current.index.versionId, nextIndex, bodies: [] } };
       }
       plan = { schemaVersion: 1, request: clone(request), noteId, compiled, source };
-      await artifact(commandPath(request.operationId), json({ plan, digest: digest(plan) }));
+      await artifact(commandPath(request.operationId), json({ plan, digest: await digest(plan) }));
     }
     return execute(plan);
   };
   return { list, read, perform, settle };
 }
-module.exports = { createLibraryRecovery };
+const api = { createLibraryRecovery };
+if (node) module.exports = api;
+else globalThis.NeoPlanetNotesLibraryRecovery = api;
+})();

@@ -1,26 +1,28 @@
 'use strict';
+(function () {
+const node = typeof module !== 'undefined' && module.exports;
 
-const { randomUUID, createHash } = require('node:crypto');
-const model = require('./planet-notes');
-const { t, getLocale } = require('./i18n');
-const { validateAction } = require('./planet-notes-organization');
-const { createLibraryRecovery } = require('./planet-notes-library-recovery');
-const { createOrganizationService } = require('./planet-notes-organization-service');
-const { createNotesObserver } = require('./planet-notes-observer');
+const { hash } = node ? require('./planet-notes-history') : globalThis.NeoPlanetNotesHistory;
+const model = node ? require('./planet-notes') : globalThis.NeoPlanetNotes;
+const { t, getLocale } = node ? require('./i18n') : globalThis.NeoI18n;
+const { validateAction } = node ? require('./planet-notes-organization') : globalThis.NeoPlanetNotesOrganization;
+const { createLibraryRecovery } = node ? require('./planet-notes-library-recovery') : globalThis.NeoPlanetNotesLibraryRecovery;
+const { createOrganizationService } = node ? require('./planet-notes-organization-service') : globalThis.NeoPlanetNotesOrganizationService;
+const { createNotesObserver } = node ? require('./planet-notes-observer') : globalThis.NeoPlanetNotesObserver;
 const fail = (code, message) => Object.assign(new Error(message), { code });
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const json = (value) => JSON.stringify(value);
 const integrity = (record) => {
   const { checksum: _checksum, ...content } = record;
-  return createHash('sha256').update(json(content)).digest('hex');
+  return hash(json(content));
 };
 const required = (value) => {
   if (value.status !== 'ok') throw fail(value.status === 'unavailable' ? 'ECLOUD' : value.status === 'missing' ? 'ENOENT' : 'EINVAL', 'Required editor data: ' + value.status);
   return value;
 };
 
-/** Main-only domain service. A book context contains the private store and adapter. */
-function createNotesService({ getBook, enabled = false, makeId = (prefix) => prefix + '-' + randomUUID(), now = () => new Date().toISOString() }) {
+/** Shared domain service. A book context contains the private store and adapter. */
+function createNotesService({ getBook, enabled = false, makeId = (prefix) => prefix + '-' + (node ? require('node:crypto').randomUUID() : globalThis.crypto.randomUUID()), now = () => new Date().toISOString() }) {
   const contexts = new Map(); const queues = new Map();
   const id = (value) => { if (!model.safeId(value)) throw fail('EINVAL', 'Invalid notes identity'); };
   const active = () => { if (!enabled) throw fail('ENOTAVAILABLE', 'Custom Notes is not enabled'); };
@@ -61,8 +63,8 @@ function createNotesService({ getBook, enabled = false, makeId = (prefix) => pre
     return { operationId: request.operationId, title: (request.title || '').trim() };
   };
   const freshId = (prefix) => { const value = makeId(prefix); id(value); return value; };
-  const validatePrepared = (record, semantic) => {
-    if (!record || typeof record.checksum !== 'string' || record.checksum !== integrity(record) || record.schemaVersion !== 1 || json(record.semantic) !== json(semantic) || !model.safeId(record.noteId) || !model.validDate(record.createdAt)) throw fail('EINVAL', 'Invalid or reused prepared command');
+  const validatePrepared = async (record, semantic) => {
+    if (!record || typeof record.checksum !== 'string' || record.checksum !== await integrity(record) || record.schemaVersion !== 1 || json(record.semantic) !== json(semantic) || !model.safeId(record.noteId) || !model.validDate(record.createdAt)) throw fail('EINVAL', 'Invalid or reused prepared command');
     const compiled = record.compiled;
     if (!compiled || !compiled.request || !model.safeId(record.versionId)) throw fail('EINVAL', 'Invalid compiled command');
     const r = compiled.request;
@@ -108,13 +110,13 @@ function createNotesService({ getBook, enabled = false, makeId = (prefix) => pre
         resolution = body.html !== request.expectedBodyToken && body.html !== request.html
           ? { method: 'preserveBodyConflict', request: { ...common, localHtml: request.html, incomingHtml: body.html, expectedBodyToken: request.expectedBodyToken } }
           : { method: 'saveNote', request: { ...common, html: request.html, expectedBodyToken: body.html, writingDay: request.writingDay, reason: 'daily' } };
-        const envelope = { checksum: record.checksum, resolution, digest: createHash('sha256').update(json(resolution)).digest('hex') };
+        const envelope = { checksum: record.checksum, resolution, digest: await hash(json(resolution)) };
         await ctx.adapter.writeDurable(path, json(envelope));
         source = await ctx.adapter.read(path);
       }
       let envelope;
       try { envelope = JSON.parse(required(source).text); } catch { throw fail('EINVAL', 'Invalid command resolution'); }
-      if (envelope.checksum !== record.checksum || envelope.digest !== createHash('sha256').update(json(envelope.resolution)).digest('hex') || !['saveNote', 'preserveBodyConflict'].includes(envelope.resolution?.method) || envelope.resolution.request?.noteId !== record.noteId) throw fail('EINVAL', 'Invalid command resolution');
+      if (envelope.checksum !== record.checksum || envelope.digest !== await hash(json(envelope.resolution)) || !['saveNote', 'preserveBodyConflict'].includes(envelope.resolution?.method) || envelope.resolution.request?.noteId !== record.noteId) throw fail('EINVAL', 'Invalid command resolution');
       resolution = envelope.resolution;
       result = await ctx.store[resolution.method](resolution.request);
     }
@@ -129,7 +131,7 @@ function createNotesService({ getBook, enabled = false, makeId = (prefix) => pre
       const source = required(await ctx.adapter.read(path));
       let record;
       try { record = JSON.parse(source.text); } catch { throw fail('EINVAL', 'Corrupt prepared editor command'); }
-      validatePrepared(record, record.semantic);
+      await validatePrepared(record, record.semantic);
       if (record.semantic.request.operationId === except || await completed(ctx, record)) continue;
       if ((await execute(ctx, record)).status !== 'saved') throw fail('EPENDING', 'An earlier editor command needs recovery');
     }
@@ -157,7 +159,7 @@ function createNotesService({ getBook, enabled = false, makeId = (prefix) => pre
       if (old.status === 'ok') {
         let record;
         try { record = JSON.parse(old.text); } catch { throw fail('EINVAL', 'Corrupt prepared editor command'); }
-        validatePrepared(record, semantic);
+        await validatePrepared(record, semantic);
         return execute(ctx, record);
       }
       await settleAll(ctx);
@@ -211,8 +213,8 @@ function createNotesService({ getBook, enabled = false, makeId = (prefix) => pre
         if (!compiled) compiled = { method: 'apply', request: { operationId: normalized.operationId, baseVersionId, nextIndex, bodies: ['create', 'copy'].includes(kind) ? [{ noteId: target, html: kind === 'copy' ? normalized.html : '<p><br></p>', expectedBodyToken: null }] : [] } };
       }
       const record = { schemaVersion: 1, semantic, noteId: target, createdAt, versionId, compiled };
-      record.checksum = integrity(record);
-      validatePrepared(record, semantic);
+      record.checksum = await integrity(record);
+      await validatePrepared(record, semantic);
       // Never replace even a malformed ledger: a retry must use the same plan.
       const check = await ctx.adapter.read(path);
       if (check.status === 'unavailable') throw fail('ECLOUD', 'Prepared command unavailable');
@@ -225,7 +227,7 @@ function createNotesService({ getBook, enabled = false, makeId = (prefix) => pre
     });
   };
   return {
-    capabilities: async () => ({ enabled: !!enabled }),
+    capabilities: async () => ({ enabled: !!enabled, canManage: !!enabled, canRestore: !!enabled }),
     load: async (bookId) => { bookIdentity(bookId); return enabled ? serial(bookId, async (ctx) => { await settleAll(ctx); return observer(ctx).metadata(); }) : { status: 'disabled' }; },
     read: async (bookId, noteId) => {
       active(); bookIdentity(bookId); id(noteId);
@@ -282,4 +284,7 @@ function createNotesService({ getBook, enabled = false, makeId = (prefix) => pre
     save: (bookId, noteId, request) => command('save', bookId, noteId, request)
   };
 }
-module.exports = { createNotesService };
+const api = { createNotesService };
+if (node) module.exports = api;
+else globalThis.NeoPlanetNotesService = api;
+})();

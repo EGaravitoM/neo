@@ -264,42 +264,75 @@
       await writeJSONFile(p(id, 'stickies.json'), []);
       return book;
     },
-    // a copy of a book: every file in its folder (chapters, notes, covers)
-    // read and written into a new folder, then book.json under the new id
-    // and title. Spare copies (.bak, .tmp) stay behind; a chapter iCloud
-    // hasn't brought down stops the copy rather than leave it out. A
-    // half-made copy is removed; the original is only read.
+    // A whole-book copy includes every notes recovery artifact. Other book
+    // spares retain their existing policy; unavailable files stop the copy.
     duplicateBook: async (bookId, title) => {
       await ready;
-      await fetchCloud(bookId, 8000);
-      const meta = JSON.parse(await readText(p(bookId, 'book.json')));
+      if (typeof bookId !== 'string' || bookId.includes('/')) throw Object.assign(new Error(t('Invalid book identity')), { code: 'EINVAL' });
+      window.NeoPlanetNotesTransfer.bookCopyPolicy(bookId, 'directory');
+      const local = async (relative) => {
+        if (await notesAvailability(relative) !== 'local') throw Object.assign(new Error(t('Some of this book is still downloading from iCloud. Try again in a moment')), { code: 'ECLOUD' });
+      };
+      await local(bookId);
+      const inventory = async (rel = '', include = true, output = []) => {
+        const source = rel ? p(bookId, rel) : bookId; await local(source);
+        const ls = await FS().readdir(at(source));
+        if (!Array.isArray(ls.files)) throw new Error(t('Invalid book listing'));
+        for (const entry of ls.files) {
+          const name = entry.name || entry; const sub = rel ? rel + '/' + name : name;
+          // Validate the path before asking native storage anything about it.
+          window.NeoPlanetNotesTransfer.bookCopyPolicy(sub, 'file');
+          await local(p(bookId, sub));
+          const type = entry.type || (await FS().stat(at(p(bookId, sub)))).type;
+          const policy = window.NeoPlanetNotesTransfer.bookCopyPolicy(sub, type);
+          if (policy === 'unavailable') throw Object.assign(new Error(t('Some of this book is still downloading from iCloud. Try again in a moment')), { code: 'ECLOUD' });
+          const included = include && policy === 'include';
+          output.push({ path: sub, type, included });
+          if (type === 'directory') await inventory(sub, included, output);
+        }
+        return output;
+      };
+      const manifest = await inventory();
+      await local(p(bookId, 'book.json'));
+      const originalMetadata = await readText(p(bookId, 'book.json'));
+      const meta = JSON.parse(originalMetadata);
+      if (!meta || typeof meta !== 'object' || !Array.isArray(meta.chapterOrder)) throw new Error(t('Invalid book metadata'));
       const seed = title ? slugify(title) : '';
       const id = 'book-' + (seed ? seed + '-' : '') + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
-      const files = [];
-      const walk = async (rel) => {
-        const ls = await FS().readdir(at(p(bookId, rel).replace(/\/$/, '')));
-        for (const f of ls.files || []) {
-          const name = (f && f.name) || f;
-          const sub = rel ? rel + '/' + name : name;
-          if (/\.icloud$/.test(name)) throw new Error(t('Some of this book is still downloading from iCloud. Try again in a moment'));
-          if (f && f.type === 'directory') await walk(sub);
-          else if (!/\.(tmp|bak)$/.test(name) && sub !== 'book.json') files.push(sub);
-        }
+      const observed = new Map(); let created = false;
+      const readSource = async (relative) => {
+        const source = p(bookId, relative); await local(source);
+        if ((await FS().stat(at(source))).type !== 'file') throw Object.assign(new Error(t('Book file type changed')), { code: 'EINVAL' });
+        const r = await FS().readFile(at(source)); // base64 preserves binary artifacts
+        if (typeof r.data !== 'string') throw new Error(t('Invalid copy source'));
+        return r.data;
       };
       try {
-        await walk('');
-        await ensureDir(p(id, 'chapters'));
-        for (const f of files) {
-          const r = await FS().readFile(at(p(bookId, f))); // base64: covers are pictures
-          await FS().writeFile({ ...at(p(id, f)), data: r.data, recursive: true });
+        // Recursive=false claims a fresh destination rather than merging into an
+        // existing book. Never remove an existing destination after a collision.
+        await FS().mkdir({ ...at(id), recursive: false }); created = true;
+        for (const entry of manifest) {
+          if (!entry.included) continue;
+          const target = p(id, entry.path);
+          if (entry.type === 'directory') { await FS().mkdir({ ...at(target), recursive: true }); continue; }
+          const data = await readSource(entry.path);
+          await FS().writeFile({ ...at(target), data, recursive: true });
+          if ((await FS().readFile(at(target))).data !== data) throw Object.assign(new Error(t('Copied book file could not be verified')), { code: 'EIO' });
+          observed.set(entry.path, await window.NeoPlanetNotesHistory.hash(data));
         }
         const now = new Date().toISOString();
         const copy = { ...meta, id, title: title || meta.title, created: now, modified: now };
         delete copy.uuid;
+        if (JSON.stringify(await inventory()) !== JSON.stringify(manifest) || await readText(p(bookId, 'book.json')) !== originalMetadata) throw Object.assign(new Error(t('The source book changed during copying')), { code: 'ECONFLICT' });
+        for (const [relative, digest] of observed) if (await window.NeoPlanetNotesHistory.hash(await readSource(relative)) !== digest) throw Object.assign(new Error(t('The source book changed during copying')), { code: 'ECONFLICT' });
         await writeJSONFile(p(id, 'book.json'), copy);
+        if (JSON.stringify(JSON.parse(await readText(p(id, 'book.json')))) !== JSON.stringify(copy)) throw new Error(t('Copied book metadata could not be verified'));
         return copy;
       } catch (err) {
-        try { await FS().rmdir({ ...at(id), recursive: true }); } catch { /* nothing made */ }
+        if (created) {
+          try { await FS().rmdir({ ...at(id), recursive: true }); }
+          catch { err.message += '\n' + t('An incomplete copy remains at {path}.', { path: at(id).path }); }
+        }
         throw err;
       }
     },
@@ -497,7 +530,10 @@
     },
     setSpellLanguage: async (code) => spellEnsure(code),
     appVersion: async () => 'Pocket 0.1.0',
-    logError: async (msg) => {
+    logError: async (msg, { quiet = false } = {}) => {
+      // Custom Notes retains failed edits and reports state in its existing view.
+      // Console diagnostics must not open Pocket's error sheet during typing.
+      if (quiet) { console.error(msg); return; }
       try {
         let prior = '';
         try { prior = await readText(p('neo-errors.log')); } catch { /* first entry */ }
@@ -513,6 +549,47 @@
     flushState: (on) => { window.pocketState.flush = !!on; },
     typewriterState: (on) => { window.pocketState.typewriter = !!on; }
   };
+  // Kept off until the complete desktop/Pocket release scope is verified.
+  const NOTES_ENABLED = false;
+  const notesAvailability = async (relative) => {
+    await ready;
+    if (!isIOS()) return 'local';
+    try {
+      const result = await libraryHome().notesStatus({ path: at(relative).path });
+      return result.state === 'local' ? 'local' : 'unavailable';
+    } catch (err) { if (err.code === 'EINVAL') throw err; return 'unavailable'; }
+  };
+  const notesService = window.NeoPlanetNotesService.createNotesService({ enabled: NOTES_ENABLED, getBook: async (bookId) => {
+    await ready;
+    const assertValid = async () => {
+      const metadata = p(bookId, 'book.json');
+      if (await notesAvailability(metadata) !== 'local') throw Object.assign(new Error('Book metadata unavailable'), { code: 'ECLOUD' });
+      const stat = await FS().stat(at(metadata));
+      if (stat.type !== 'file') throw Object.assign(new Error('Invalid book metadata file'), { code: 'EINVAL' });
+      const book = JSON.parse(await readText(metadata));
+      if (!book || typeof book.id !== 'string' || !Array.isArray(book.chapterOrder)) throw Object.assign(new Error(t('Invalid book metadata')), { code: 'EINVAL' });
+      return book;
+    };
+    await assertValid();
+    const adapter = window.NeoPlanetNotesPocket.createPocketNotesAdapter(bookId, { filesystem: FS(), location: at, availability: notesAvailability });
+    return { adapter, store: window.NeoPlanetNotesStore.createNotesStore(adapter), assertValid, readLegacy: async ({ page }) => {
+      const book = await assertValid();
+      if (page !== 'book' && !book.chapterOrder.includes(page)) throw Object.assign(new Error('Unknown chapter notes page'), { code: 'EINVAL' });
+      const file = p(bookId, page === 'book' ? 'notes.html' : 'notes-' + page + '.html');
+      if (await notesAvailability(file) !== 'local') return { status: 'unavailable' };
+      try {
+        const stat = await FS().stat(at(file));
+        if (stat.type !== 'file') throw Object.assign(new Error('Invalid notes file'), { code: 'EINVAL' });
+        return { status: 'ok', html: await readText(file) };
+      } catch (err) { if (['ENOENT', 'OS-PLUG-FILE-0008'].includes(err.code)) return { status: 'missing' }; throw err; }
+    } };
+  } });
+  Object.assign(window.neo, window.NeoPlanetNotesPocketBridge.createPocketNotesBridge({ enabled: NOTES_ENABLED, service: notesService }));
+  // The WebView may get only a short suspension window. Start a flush without
+  // claiming the OS will wait; durable intents settle on the next opening.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) window.dispatchEvent(new Event('neo-notes-background'));
+  });
   window.pocketState = { poetry: false, flush: false, typewriter: false };
 
   // Interface language: the same locales/ files as the desktop, picked by

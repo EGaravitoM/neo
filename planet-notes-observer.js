@@ -1,8 +1,9 @@
 'use strict';
+(function () {
+const node = typeof module !== 'undefined' && module.exports;
 
-const { createHash } = require('node:crypto');
-const model = require('./planet-notes');
-const hash = (text) => createHash('sha256').update(text).digest('hex');
+const { hash } = node ? require('./planet-notes-history') : globalThis.NeoPlanetNotesHistory;
+const model = node ? require('./planet-notes') : globalThis.NeoPlanetNotes;
 const json = JSON.stringify;
 const fail = (code, message) => Object.assign(new Error(message), { code });
 const required = (r) => {
@@ -20,21 +21,21 @@ function createNotesObserver({ adapter, store, makeId, now }) {
     else if (required(previous).text !== text) throw fail('ECONFLICT', 'Observation identity collision');
     if (required(await adapter.read(path)).text !== text) throw fail('EIO', 'Observation verification failed');
   };
-  const observe = (noteId, html) => artifact('recovery/observed-bodies/' + noteId + '/' + hash(html) + '.html', html);
+  const observe = async (noteId, html) => artifact('recovery/observed-bodies/' + noteId + '/' + await hash(html) + '.html', html);
   const revision = async (noteId, html) => {
     await observe(noteId, html);
-    const id = 'r-observed-' + hash(html);
+    const id = 'r-observed-' + await hash(html);
     const path = 'revisions/' + noteId + '/' + id;
     const old = await adapter.read(path + '.json');
     if (old.status === 'ok') {
       let record;
       try { record = JSON.parse(old.text); } catch { throw fail('EINVAL', 'Invalid observed revision'); }
-      if (model.validateRevision(record).status !== 'ok' || record.noteId !== noteId || record.bodyHash !== hash(html)) throw fail('EINVAL', 'Invalid observed revision');
+      if (model.validateRevision(record).status !== 'ok' || record.noteId !== noteId || record.bodyHash !== await hash(html)) throw fail('EINVAL', 'Invalid observed revision');
       await artifact(path + '.html', html); return;
     }
     if (old.status !== 'missing') required(old);
     await artifact(path + '.html', html);
-    await artifact(path + '.json', json({ schemaVersion: 1, id, noteId, operationId: 'o-observed-' + hash(html), createdAt: now(), reason: 'external', writingDay: null, bodyHash: hash(html) }));
+    await artifact(path + '.json', json({ schemaVersion: 1, id, noteId, operationId: 'o-observed-' + await hash(html), createdAt: now(), reason: 'external', writingDay: null, bodyHash: await hash(html) }));
   };
   const remember = async () => {
     const loaded = await store.load();
@@ -117,4 +118,7 @@ function createNotesObserver({ adapter, store, makeId, now }) {
   };
   return { observe, remember, metadata, refresh };
 }
-module.exports = { createNotesObserver };
+const api = { createNotesObserver };
+if (node) module.exports = api;
+else globalThis.NeoPlanetNotesObserver = api;
+})();

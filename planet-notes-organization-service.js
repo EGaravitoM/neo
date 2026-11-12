@@ -1,12 +1,14 @@
 'use strict';
+(function () {
+const node = typeof module !== 'undefined' && module.exports;
 
-const { createHash } = require('node:crypto');
-const domain = require('./planet-notes-organization');
-const model = require('./planet-notes');
-const { createOrganizationResolution } = require('./planet-notes-organization-resolution');
+const { hash } = node ? require('./planet-notes-history') : globalThis.NeoPlanetNotesHistory;
+const domain = node ? require('./planet-notes-organization') : globalThis.NeoPlanetNotesOrganization;
+const model = node ? require('./planet-notes') : globalThis.NeoPlanetNotes;
+const { createOrganizationResolution } = node ? require('./planet-notes-organization-resolution') : globalThis.NeoPlanetNotesOrganizationResolution;
 const json = JSON.stringify;
 const clone = (v) => JSON.parse(json(v));
-const digest = (v) => createHash('sha256').update(json(v)).digest('hex');
+const digest = (v) => hash(json(v));
 const fail = (code, message) => Object.assign(new Error(message), { code });
 const required = (r) => {
   if (r.status !== 'ok') throw fail(r.status === 'unavailable' ? 'ECLOUD' : r.status === 'missing' ? 'ENOENT' : 'EINVAL', 'Organization data: ' + r.status);
@@ -22,11 +24,11 @@ function createOrganizationService({ adapter, store, makeId, now, remember, loca
     return sessions.get(session);
   };
   const paths = (id) => ({ plan: 'recovery/organization-commands/' + id + '.json', done: 'recovery/organization-completions/' + id + '.json' });
-  const decode = (text) => {
+  const decode = async (text) => {
     let envelope;
     try { envelope = JSON.parse(text); } catch { throw fail('EINVAL', 'Invalid organization journal'); }
     const p = envelope?.plan;
-    if (!p || envelope.digest !== digest(p) || p.schemaVersion !== 1 || !model.safeId(p.request?.operationId) || model.validateIndex(p.after).status !== 'ok' || (p.before !== null && model.validateIndex(p.before).status !== 'ok') || !['organize', 'undo'].includes(p.kind)) throw fail('EINVAL', 'Corrupt organization plan');
+    if (!p || envelope.digest !== await digest(p) || p.schemaVersion !== 1 || !model.safeId(p.request?.operationId) || model.validateIndex(p.after).status !== 'ok' || (p.before !== null && model.validateIndex(p.before).status !== 'ok') || !['organize', 'undo'].includes(p.kind)) throw fail('EINVAL', 'Corrupt organization plan');
     if (p.kind === 'organize') domain.validateAction(p.request);
     if (p.compiled && (!['trashNote', 'restoreTrash'].includes(p.compiled.method) || p.compiled.request.operationId !== p.request.operationId || p.compiled.request.versionId !== p.after.versionId || p.compiled.request.baseVersionId !== p.before?.versionId)) throw fail('EINVAL', 'Invalid compiled history command');
     if (p.changed && (!p.before && p.after.parentVersionIds.length || p.before && !p.after.parentVersionIds.includes(p.before.versionId))) throw fail('EINVAL', 'Invalid organization ancestry');
@@ -34,7 +36,7 @@ function createOrganizationService({ adapter, store, makeId, now, remember, loca
   };
   const resolution = createOrganizationResolution({ adapter, store, makeId, now, readPlan: async (id) => {
     if (!model.safeId(id)) throw fail('EINVAL', 'Invalid undo source identity');
-    const source = decode(required(await adapter.read(paths(id).plan)).text);
+    const source = await decode(required(await adapter.read(paths(id).plan)).text);
     if (source.request.operationId !== id || source.kind !== 'organize' || !source.changed) throw fail('EINVAL', 'Mismatched undo source journal');
     return source;
   } });
@@ -42,8 +44,8 @@ function createOrganizationService({ adapter, store, makeId, now, remember, loca
     const result = await adapter.read(paths(plan.request.operationId).done);
     if (result.status === 'missing') return false;
     const text = required(result).text;
-    if (text === json({ digest: digest(plan) })) return 'saved';
-    if (text === json({ digest: digest(plan), status: 'conflict' })) return 'conflict';
+    if (text === json({ digest: await digest(plan) })) return 'saved';
+    if (text === json({ digest: await digest(plan), status: 'conflict' })) return 'conflict';
     throw fail('EINVAL', 'Invalid organization completion');
   };
   const execute = async (plan) => {
@@ -54,37 +56,37 @@ function createOrganizationService({ adapter, store, makeId, now, remember, loca
       : await store.apply({ operationId: plan.request.operationId, baseVersionId: plan.before?.versionId || null, nextIndex: plan.after, bodies: [] });
     }
     if (result.status === 'conflict-preserved') {
-      await adapter.writeDurable(paths(plan.request.operationId).done, json({ digest: digest(plan), status: 'conflict' }));
+      await adapter.writeDurable(paths(plan.request.operationId).done, json({ digest: await digest(plan), status: 'conflict' }));
       return { status: 'conflict' };
     }
     if (result.status === 'conflict' && !plan.compiled && plan.before) {
       result = await resolution.resolve(plan);
       if (result.status === 'conflict-preserved') {
-        await adapter.writeDurable(paths(plan.request.operationId).done, json({ digest: digest(plan), status: 'conflict' }));
+        await adapter.writeDurable(paths(plan.request.operationId).done, json({ digest: await digest(plan), status: 'conflict' }));
         return { status: 'conflict' };
       }
     }
     if (result.status === 'conflict' && !plan.before && !plan.compiled) {
       await store.abandonInitialMetadata({ operationId: plan.request.operationId, baseVersionId: null, nextIndex: plan.after, bodies: [] });
-      await adapter.writeDurable(paths(plan.request.operationId).done, json({ digest: digest(plan), status: 'conflict' }));
+      await adapter.writeDurable(paths(plan.request.operationId).done, json({ digest: await digest(plan), status: 'conflict' }));
       return { status: 'conflict' };
     }
     if (result.status === 'conflict' && plan.compiled) {
       const retired = await store.abandonOrganizationHistory(plan.compiled.method === 'trashNote' ? 'trash' : 'restore-trash', plan.compiled.request);
       if (retired.status === 'conflict-preserved') {
-        await adapter.writeDurable(paths(plan.request.operationId).done, json({ digest: digest(plan), status: 'conflict' }));
+        await adapter.writeDurable(paths(plan.request.operationId).done, json({ digest: await digest(plan), status: 'conflict' }));
         return { status: 'conflict' };
       }
       result = retired;
     }
     if (result.status !== 'saved') return result;
-    if (!await completion(plan)) await adapter.writeDurable(paths(plan.request.operationId).done, json({ digest: digest(plan) }));
+    if (!await completion(plan)) await adapter.writeDurable(paths(plan.request.operationId).done, json({ digest: await digest(plan) }));
     await remember();
     return { ...result, itemId: plan.resultId, changed: plan.changed };
   };
   const settle = async () => {
     for (const path of (await adapter.list()).filter((p) => /^recovery\/organization-commands\/[^/]+\.json$/.test(p)).sort()) {
-      const plan = decode(required(await adapter.read(path)).text);
+      const plan = await decode(required(await adapter.read(path)).text);
       if (paths(plan.request.operationId).plan !== path) throw fail('EINVAL', 'Mismatched organization journal');
       if (await completion(plan)) continue;
       const result = await execute(plan);
@@ -97,7 +99,7 @@ function createOrganizationService({ adapter, store, makeId, now, remember, loca
     const path = paths(normalized.operationId).plan; const previous = await adapter.read(path);
     let plan;
     if (previous.status === 'ok') {
-      plan = decode(previous.text);
+      plan = await decode(previous.text);
       if (plan.kind !== kind || json(plan.request) !== json(normalized)) throw fail('EINVAL', 'Organization identity reused');
     } else {
       if (previous.status !== 'missing') required(previous);
@@ -146,7 +148,7 @@ function createOrganizationService({ adapter, store, makeId, now, remember, loca
       if (changed) { after.versionId = versionId; after.parentVersionIds = before ? [before.versionId] : []; }
       if (model.validateIndex(after).status !== 'ok') throw fail('EINVAL', 'Invalid organization result');
       plan = { schemaVersion: 1, kind, request: normalized, before, after, resultId, changed, undoneOperationId, compiled };
-      const envelope = json({ plan, digest: digest(plan) });
+      const envelope = json({ plan, digest: await digest(plan) });
       await adapter.writeDurable(path, envelope);
       if (required(await adapter.read(path)).text !== envelope) throw fail('EIO', 'Organization journal verification failed');
     }
@@ -164,4 +166,7 @@ function createOrganizationService({ adapter, store, makeId, now, remember, loca
   };
   return { settle, organize: (request, session) => perform('organize', request, session), undo: (request, session) => perform('undo', request, session), canUndo: (session) => history(session).stack.length > 0 };
 }
-module.exports = { createOrganizationService };
+const api = { createOrganizationService };
+if (node) module.exports = api;
+else globalThis.NeoPlanetNotesOrganizationService = api;
+})();

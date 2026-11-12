@@ -69,7 +69,11 @@ async function run() {
   await js(`openCustomNote('${note.noteId}')`);
   console.log('PASS: existing book/chapter notes participate in unified search and keep familiar entry points');
   await click('history'); await js('notesExplorer.settled()');
-  await click('preview');
+  // More than one daily revision may exist when a fixed fixture date differs
+  // from today's writing day. Select the intended source, not a random ID order.
+  const revisionPosition=await js(`(async()=>{const list=await neo.notesRecoveryList('${book.id}',{kind:'revisions',noteId:'${note.noteId}'});return list.entries.findIndex(entry=>entry.html==='<p><br></p>');})()`);
+  assert.ok(revisionPosition>=0);
+  await js(`document.querySelectorAll('.notes-recovery-list [data-explorer-action="preview"]')[${revisionPosition}].click()`);
   await until(() => js(`!!document.getElementById('custom-notes-preview')`));
   assert.equal(await js(`document.getElementById('aux-editor').hidden`),true);
   assert.equal(await js(`document.getElementById('custom-notes-preview').isContentEditable`),false);
@@ -160,6 +164,27 @@ async function run() {
     explorer.detach();host.remove();
   })()`);
   console.log('PASS: unsaved first chapter notes, deleted/merged filter cleanup, partial cloud coverage and retry');
+  await click('close'); await js(`openCustomNote('${note.noteId}')`);
+  await js(`document.getElementById('aux-editor').focus()`); await win.webContents.insertText(' before desktop copy');
+  const originalRead=fs.promises.readFile; let verificationEntered=false; let releaseVerification;
+  const blockedVerification=new Promise(resolve=>{releaseVerification=resolve;});
+  fs.promises.readFile=async(file,...args)=>{
+    const name=String(file);
+    if(name.endsWith('/notes/'+note.noteId+'.html') && name.startsWith(library+path.sep) && !name.startsWith(path.join(library,book.id)+path.sep)) { verificationEntered=true; await blockedVerification; }
+    return originalRead.call(fs.promises,file,...args);
+  };
+  const copying=js(`neo.duplicateBook('${book.id}','Desktop verified copy')`);let bookCopy;
+  try {
+    await until(()=>verificationEntered);
+    assert.equal(await js(`document.getElementById('aux-editor').contentEditable`),'false');
+    releaseVerification();bookCopy=await copying;
+  } finally {releaseVerification();await copying.catch(()=>{});fs.promises.readFile=originalRead;}
+
+  assert.notEqual(bookCopy.id,book.id);
+  const sourceBody=fs.readFileSync(bodyPath,'utf8'); assert.match(sourceBody,/before desktop copy/);
+  assert.equal(fs.readFileSync(path.join(library,bookCopy.id,'notes',note.noteId+'.html'),'utf8'),sourceBody);
+  await until(()=>js(`document.getElementById('aux-editor').contentEditable==='true'`));
+  console.log('PASS: desktop duplication flushes pending writing, stays responsive during verification, and resumes afterward');
   clearTimeout(deadline); fs.rmSync(root,{recursive:true,force:true}); app.exit(0);
 }
 run().catch(err=>{console.error(err.stack);console.error('Fixture retained:',root);clearTimeout(deadline);app.exit(1);});

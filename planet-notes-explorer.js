@@ -9,7 +9,7 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
   let owner = null; let generation = 0; let navigation = 0; let mode = null; let index = null;
   let queryText = ''; let scope = 'all'; let selectedLabels = new Set(); let trashText = '';
   let list = null; let selectedWords = [];
-  let model = null; let metadataUnavailable = false; let busy = false; let loadTask = null; const pending = new Map();
+  let canRestore = true; let model = null; let metadataUnavailable = false; let busy = false; let loadTask = null; const pending = new Map();
   const textOf = (html) => {
     const holder = document.createElement('template'); holder.innerHTML = html;
     holder.content.querySelectorAll('script,style,template,noscript').forEach((n) => n.remove());
@@ -146,6 +146,7 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
     return String(value);
   };
   const command = async (request) => {
+    if (!canRestore) throw Object.assign(new Error('Restoration requires desktop NEO'), { code: 'ENOTSUPPORTED' });
     if (busy) return;
     const book = owner; const turn = generation; const epoch = navigation;
     const previous = pending.get(book);
@@ -176,15 +177,20 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
     if (typeof result.html === 'string') {
       await preview({ title, html: result.html, ref: entry.ref });
       if (!sameOwner(book, turn) || epoch !== navigation) return;
-      if (entry.ref.kind === 'trash') actions.append(button(t('Restore'), () => command({ ...entry.ref, expectedVersionId: result.versionId }), 'restore'));
-      else actions.append(button(t('Restore'), () => command({ ...entry.ref, mode: 'replace', expectedVersionId: result.versionId }), 'restore'), button(t('Restore as new note'), () => command({ ...entry.ref, mode: 'new', expectedVersionId: result.versionId }), 'restore-new'));
+      if (canRestore && entry.ref.kind === 'trash') actions.append(button(t('Restore'), () => command({ ...entry.ref, expectedVersionId: result.versionId }), 'restore'));
+      else if (canRestore) actions.append(button(t('Restore'), () => command({ ...entry.ref, mode: 'replace', expectedVersionId: result.versionId }), 'restore'), button(t('Restore as new note'), () => command({ ...entry.ref, mode: 'new', expectedVersionId: result.versionId }), 'restore-new'));
     } else if (result.record.variants) {
-      await preview({ title: t('Organization conflict'), text: t('Choose recorded values to apply to the current notebook. Notes and recovery evidence are preserved.'), ref: entry.ref });
+      await preview({ title: t('Organization conflict'), text: canRestore ? t('Choose recorded values to apply to the current notebook. Notes and recovery evidence are preserved.') : t('These competing organization values are preserved. Resolve them in desktop NEO.'), ref: entry.ref });
       if (!sameOwner(book, turn) || epoch !== navigation) return;
       const form = node('form', undefined, 'notes-explorer-form'); form.setAttribute('aria-label', t('Recover organization'));
       const selections = [];
       for (const choice of selection.recoveryChoices(result.record)) {
-        const label = node('label', (choice.title || t('Top level')) + ' · ' + fieldName(choice.field)); const select = node('select');
+        const label = node('label', (choice.title || t('Top level')) + ' · ' + fieldName(choice.field));
+        if (!canRestore) {
+          for (const side of ['local', 'incoming']) label.append(node('small', t('{side}: {value}', { side: side === 'local' ? t('This device') : t('Other version'), value: describe(choice, side, result.record) })));
+          form.append(label); continue;
+        }
+        const select = node('select');
         select.append(node('option', t('Keep current value'))); select.firstChild.value = '';
         for (const side of ['local', 'incoming']) { const option = node('option', t('{side}: {value}', { side: side === 'local' ? t('This device') : t('Other version'), value: describe(choice, side, result.record) })); option.value = side; select.append(option); }
         if (choice.collection === 'notes' && choice.field === '*') { select.disabled = true; label.append(node('small', t('Restore note identities through Trash or Recovered Notes.'))); }
@@ -196,7 +202,7 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
       }, 'apply-values');
       const updateApply = () => { apply.disabled = !selections.some(({ select }) => !select.disabled && select.value); };
       for (const { select } of selections) select.addEventListener('change', updateApply);
-      updateApply(); form.append(apply);
+      updateApply(); if (canRestore) form.append(apply);
       form.addEventListener('submit', (e) => e.preventDefault()); actions.append(form);
     } else {
       const record = result.record;
@@ -257,6 +263,7 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
     async mount(host, book) {
       const capability = await call('notesCapabilities');
       if (!capability.enabled || currentBook() !== book) return;
+      canRestore = capability.canRestore !== false;
       if (owner !== book) { owner = book; generation++; navigation++; mode = null; selectedLabels = new Set(); queryText = ''; trashText = ''; index = null; model = null; render(); }
       host.prepend(root); onMode(!!mode);
     },

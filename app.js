@@ -2089,6 +2089,7 @@ async function duplicateBook(meta) {
   }
   let copy;
   try {
+    if (customNotesController) await customNotesController.flush();
     copy = await window.neo.duplicateBook(meta.id, t('{title} (copy)', { title: meta.title }));
   } catch (err) {
     window.neo.logError('duplicate: ' + (err && err.stack || err));
@@ -8179,7 +8180,7 @@ function customNotesCaret(ed) {
     selection.setBaseAndExtent(...point(anchor), ...point(focus));
   };
 }
-const customNotesError = (err) => window.neo.logError('custom notes: ' + (err && err.message || err));
+const customNotesError = (err) => window.neo.logError('custom notes: ' + (err && err.message || err), { quiet: true });
 function customNotesStatus(text) {
   let status = $('#custom-notes-status');
   if (!status) {
@@ -8244,7 +8245,7 @@ async function closeNotesRecoveryPreview(reopen) {
   if (reopen && document && book && document.bookId === book.id) await openNotesExplorerDocument(document);
 }
 function mountNotesExplorer(host) {
-  if (!book || IS_POCKET || !window.NeoPlanetNotesExplorer) return;
+  if (!book || !window.NeoPlanetNotesExplorer) return;
   if (!notesExplorer) { notesExplorer = window.NeoPlanetNotesExplorer.createNotesExplorer({
     api: window.neo, t, locale: () => NeoI18n.getLocale(), currentBook: () => book && book.id,
     catalogLegacy: () => [{ document: { kind: 'book' }, title: t('The Book'), location: t('The Book') }, ...book.chapterOrder.filter(isStory).map((chapterId) => ({ document: { kind: 'chapter', chapterId }, title: notesLabel(chapterId), location: t('Chapters') }))],
@@ -8296,13 +8297,13 @@ async function prepareCustomNotes(inspector) {
           copy.textContent = t('Create editable copy'); $('#aux-title').after(copy);
           copy.addEventListener('click', () => customNotesController.createEditableCopy().catch(customNotesError));
         }
-        copy.hidden = !state.canCopy;
+        copy.hidden = !state.canCopy || capabilities.canManage === false;
         ed.hidden = false; auxDirty = false;
         $('#aux-title').textContent = state.title || t('Untitled');
         if ($('#notes-outline')) $('#notes-outline').hidden = true;
         if ($('#notes-up')) $('#notes-up').hidden = true;
         if ($('#notes-side')) $('#notes-side').innerHTML = '';
-        const messages = { loading: t('Loading notes…'), missing: t('This note is missing from disk.'), unavailable: t('This note is not available on this device yet.'), unsupported: t('This HTML is read-only. Create an editable copy to simplify it.'), unvalidated: t('This note is waiting for HTML inspection.'), error: t('NEO couldn’t read this page from disk') };
+        const messages = { loading: t('Loading notes…'), missing: t('This note is missing from disk.'), unavailable: t('This note is not available on this device yet.'), unsupported: capabilities.canManage === false ? t('This HTML is read-only on Pocket.') : t('This HTML is read-only. Create an editable copy to simplify it.'), unvalidated: t('This note is waiting for HTML inspection.'), error: t('NEO couldn’t read this page from disk') };
         customNotesStatus(state.editable ? '' : messages[state.status] || t('This note cannot be edited yet.'));
       }
     }
@@ -8370,6 +8371,10 @@ async function refreshCustomNotes() {
   if (!customNotesController || !customNotesSessionBook || customNotesFrozen || document.hidden || currentTab !== 'notes') return;
   try { await customNotesController.refresh(); } catch (err) { customNotesError(err); }
 }
+window.addEventListener('neo-notes-background', () => {
+  if (customNotesController) customNotesController.flush().catch(customNotesError);
+  flushAux();
+});
 window.addEventListener('focus', refreshCustomNotes);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshCustomNotes(); });
 setInterval(refreshCustomNotes, 5000);
@@ -8495,7 +8500,7 @@ function renderNotesNav() {
 }
 
 function mountCustomNotesTree(host) {
-  if (!book || IS_POCKET || !window.NeoPlanetNotesTree) return;
+  if (!book || !window.NeoPlanetNotesTree) return;
   if (!customNotesTree) customNotesTree = window.NeoPlanetNotesTree.createNotesTree({
     api: window.neo, t, locale: () => NeoI18n.getLocale(), contextMenu: popMenu,
     currentBook: () => book && book.id, canManage: moreOn,

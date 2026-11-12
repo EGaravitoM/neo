@@ -20,6 +20,7 @@ public class LibraryHomePlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "locate", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "fetch", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "notesStatus", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setKeyboard", returnType: CAPPluginReturnPromise)
     ]
 
@@ -58,6 +59,44 @@ public class LibraryHomePlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func locate(_ call: CAPPluginCall) {
         let h = home()
         call.resolve(["path": h.url.absoluteString, "cloud": h.cloud])
+    }
+
+    // Notes use a strict single-path guard. Never report an undownloaded file
+    // as missing, or let a link escape the book-local storage protocol.
+    @objc func notesStatus(_ call: CAPPluginCall) {
+        let h = home()
+        guard let raw = call.getString("path"), let target = URL(string: raw),
+              target.isFileURL else { call.reject("Invalid notes path", "EINVAL"); return }
+        let base = h.url.standardizedFileURL
+        let file = target.standardizedFileURL
+        guard file.path == base.path || file.path.hasPrefix(base.path + "/") else {
+            call.reject("Notes path outside library", "EINVAL"); return
+        }
+        let fm = FileManager.default
+        let relative = String(file.path.dropFirst(base.path.count))
+        var current = base
+        for part in relative.split(separator: "/") {
+            current.appendPathComponent(String(part))
+            if let attrs = try? fm.attributesOfItem(atPath: current.path),
+               attrs[.type] as? FileAttributeType == .typeSymbolicLink {
+                call.reject("Linked notes path", "EINVAL"); return
+            }
+            if h.cloud {
+                let placeholder = current.deletingLastPathComponent()
+                    .appendingPathComponent("." + current.lastPathComponent + ".icloud")
+                if fm.fileExists(atPath: placeholder.path) {
+                    try? fm.startDownloadingUbiquitousItem(at: current)
+                    call.resolve(["state": "unavailable"]); return
+                }
+                let values = try? current.resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey])
+                if values?.isUbiquitousItem == true,
+                   let status = values?.ubiquitousItemDownloadingStatus, status != .current {
+                    try? fm.startDownloadingUbiquitousItem(at: current)
+                    call.resolve(["state": "unavailable"]); return
+                }
+            }
+        }
+        call.resolve(["state": "local"])
     }
 
     // Files another device wrote arrive first as placeholders. Ask iCloud to
