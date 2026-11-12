@@ -20,7 +20,8 @@
  *   destination. Failed rename must never fall back to an in-place write.
  * @property {function(string): Promise<void>} remove Removes only the checked
  *   book-local file, respecting cloud guards. Internal protocol cleanup only.
- * @property {function(): Promise<string[]>} list Lists relative regular files,
+ * @property {function(string=): Promise<string[]>} list Lists root-relative regular files
+ *   under an optional checked directory prefix,
  *   preserving unavailable entries and rejecting links/unsupported file types.
  */
 const fail = (code, message) => Object.assign(new Error(message), { code });
@@ -91,8 +92,8 @@ function createPocketNotesAdapter(bookId, { filesystem, location, availability, 
         try { await filesystem.deleteFile(location(path)); } catch (err) { if (!missing(err)) throw err; }
       });
     },
-    async list() {
-      const result = []; const pending = [root];
+    async list(prefix = '') {
+      const result = []; const pending = [prefix ? checked(prefix) : root];
       while (pending.length) {
         const path = pending.pop(); await validate(path, true);
         let entries; try { entries = (await filesystem.readdir(location(path))).files; } catch (err) { if (missing(err)) continue; throw err; }

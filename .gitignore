@@ -30,3 +30,6 @@ pocket/www/planet-notes*.js
 # working files beside the repo, never part of it
 Claude outputs/
 docs/sessions/
+
+# Local Stage 7 benchmark evidence (JSON/Markdown, not application data)
+stress-results/

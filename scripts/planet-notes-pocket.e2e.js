@@ -134,7 +134,10 @@ async function run() {
   assert.equal(await js(`document.getElementById('custom-notes-copy').hidden`), true);
   assert.equal(await js('!!window.pocketExecuted'), false);
   console.log('PASS: Pocket search, read-only trash/conflict inspection, denied restoration and inert unsupported HTML');
-  await js('backToShelf()');
+  // Returning to the shelf starts the existing asynchronous manuscript-position
+  // metadata save. Settle it before asserting a stable-source duplicate; the
+  // copier correctly rejects a source that changes during its verification.
+  await js(`(async()=>{const original=writeBookMeta;const pending=[];writeBookMeta=(...args)=>{const task=original(...args);pending.push(task);return task;};try{await backToShelf();await Promise.all(pending);}finally{writeBookMeta=original;}})()`);
   const opaque = path.join(directory, 'notes', 'recovery', 'copy-artifacts'); fs.mkdirSync(opaque, { recursive: true });
   fs.writeFileSync(path.join(opaque, 'observed.tmp'), 'Interrupted notes writing');
   fs.writeFileSync(path.join(opaque, 'observed.bak'), Buffer.from([0, 1, 255]));

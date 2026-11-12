@@ -85,7 +85,7 @@ function createOrganizationService({ adapter, store, makeId, now, remember, loca
     return { ...result, itemId: plan.resultId, changed: plan.changed };
   };
   const settle = async () => {
-    for (const path of (await adapter.list()).filter((p) => /^recovery\/organization-commands\/[^/]+\.json$/.test(p)).sort()) {
+    for (const path of (await adapter.list('recovery/organization-commands')).filter((p) => /^recovery\/organization-commands\/[^/]+\.json$/.test(p)).sort()) {
       const plan = await decode(required(await adapter.read(path)).text);
       if (paths(plan.request.operationId).plan !== path) throw fail('EINVAL', 'Mismatched organization journal');
       if (await completion(plan)) continue;

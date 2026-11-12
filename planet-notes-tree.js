@@ -259,11 +259,16 @@ function createNotesTree({ api, t, locale, currentBook, canManage, openNote, cre
       const tree = el('div'); tree.className = 'custom-notes-tree'; tree.setAttribute('role', 'tree'); tree.setAttribute('aria-label', t('Custom Notes')); root.append(tree);
       const rows = domain.visibleTree(index, state().expanded, locale());
       if (!rows.some((row) => row.item.id === selected)) selected = rows[0]?.item.id || null;
+      // Visual indentation must leave space for the title at any logical depth.
+      // Parent relationships, full paths and aria-level retain the actual depth.
+      const paneWidth = root.clientWidth || root.parentElement?.clientWidth || 248;
+      const uiSize = parseFloat(getComputedStyle(root).fontSize) || 13;
+      const maxIndent = Math.max(18, Math.min(paneWidth / 2, paneWidth - uiSize * 16));
       rows.forEach((value, at) => {
         const row = el('div', undefined, 'nav-item notes-item custom-note-row'); row.dataset.itemId = value.item.id; row.dataset.kind = value.kind; row.setAttribute('role', 'treeitem');
-        row.setAttribute('aria-level', value.depth + 1); row.setAttribute('aria-selected', String(selected === value.item.id)); row.style.paddingInlineStart = (value.depth * 14 + 18) + 'px';
+        row.setAttribute('aria-level', value.depth + 1); row.setAttribute('aria-selected', String(selected === value.item.id)); row.style.paddingInlineStart = Math.min(value.depth * 14 + 18, maxIndent) + 'px';
         row.classList.toggle('current', value.kind === 'note' && activeNote?.() === value.item.id); row.tabIndex = selected === value.item.id ? 0 : -1;
-        const siblings = domain.sortedChildren(index, value.item.parentId, locale()); row.setAttribute('aria-setsize', siblings.length); row.setAttribute('aria-posinset', siblings.findIndex((n) => n.id === value.item.id) + 1);
+        row.setAttribute('aria-setsize', value.setSize); row.setAttribute('aria-posinset', value.posInSet);
         if (value.kind === 'group') row.setAttribute('aria-expanded', String(state().expanded.has(value.item.id)));
         const line = el('div', undefined, 'n-row'); row.append(line);
         line.append(el('span', value.kind === 'group' ? state().expanded.has(value.item.id) ? '▾' : '▸' : '', 'custom-note-disclosure'), el('span', labelFor(value.item), 'n-label custom-note-title'));

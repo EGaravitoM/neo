@@ -130,7 +130,7 @@ function createNotesStore(adapter) {
   };
   const recoverBase = async (publishedVersion = null) => {
     const results = await history.recover(publishedVersion);
-    for (const path of (await adapter.list()).filter((p) => /^recovery\/operations\/[a-z][a-z0-9]*-[A-Za-z0-9-]+\.json$/.test(p)).sort()) {
+    for (const path of (await adapter.list('recovery/operations')).filter((p) => /^recovery\/operations\/[a-z][a-z0-9]*-[A-Za-z0-9-]+\.json$/.test(p)).sort()) {
       const record = await adapter.read(path);
       if (record.status !== 'ok') { results.push({ path, status: record.status }); continue; }
       let request;
@@ -158,7 +158,7 @@ function createNotesStore(adapter) {
   };
   history.recover = async (publishedVersion = null) => {
     // No history module is needed when no history operations have been persisted.
-    if (!(await adapter.list()).some((p) => p.startsWith('recovery/history-operations/'))) return [];
+    if (!(await adapter.list('recovery/history-operations')).some((p) => p.startsWith('recovery/history-operations/'))) return [];
     return getHistory().recover(publishedVersion);
   };
   const command = (name, r) => {
@@ -182,7 +182,7 @@ function createNotesStore(adapter) {
   };
   const recover = async () => {
     const results = await recoverBase();
-    if ((await adapter.list()).some((p) => p.startsWith('recovery/reconcile-operations/'))) results.push(...await getRecovery().recover());
+    if ((await adapter.list('recovery/reconcile-operations')).some((p) => p.startsWith('recovery/reconcile-operations/'))) results.push(...await getRecovery().recover());
     return results;
   };
   // A published operation may have failed only its final receipt. Finish it
@@ -193,7 +193,7 @@ function createNotesStore(adapter) {
     if (current.status === 'missing') return;
     if (current.status !== 'ok') throw error(current.status === 'unavailable' ? 'ECLOUD' : 'EINVAL', 'Cannot settle the current notes version');
     const results = await recoverBase(current.index.versionId);
-    if ((await adapter.list()).some((path) => path.startsWith('recovery/reconcile-operations/'))) results.push(...await getRecovery().recover(current.index.versionId));
+    if ((await adapter.list('recovery/reconcile-operations')).some((path) => path.startsWith('recovery/reconcile-operations/'))) results.push(...await getRecovery().recover(current.index.versionId));
     if (results.some((result) => !['saved', 'conflict-preserved'].includes(result.status))) {
       const failure = error(results.some((result) => result.status === 'unavailable') ? 'ECLOUD' : 'EPENDING', 'A published notes operation must finish before another write');
       failure.pending = results.filter((result) => result.status !== 'saved');

@@ -117,7 +117,7 @@ function createLibraryRecovery({ adapter, store, makeId, now, remember }) {
     return result;
   };
   const settle = async () => {
-    for (const path of (await adapter.list()).filter((p) => /^recovery\/view-commands\/[^/]+\.json$/.test(p)).sort()) {
+    for (const path of (await adapter.list('recovery/view-commands')).filter((p) => /^recovery\/view-commands\/[^/]+\.json$/.test(p)).sort()) {
       const plan = await decode(required(await adapter.read(path)).text);
       if (commandPath(plan.request.operationId) !== path) throw fail('EINVAL', 'Mismatched recovery journal');
       if (!await completion(plan)) {

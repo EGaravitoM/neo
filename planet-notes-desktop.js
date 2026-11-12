@@ -104,10 +104,14 @@ function createDesktopNotesAdapter(root, { availability, io = fs.promises } = {}
         try { await io.unlink(file); await syncDir(path.dirname(file)); } catch (err) { if (err.code !== 'ENOENT') throw err; }
       });
     },
-    async list() {
+    async list(prefix = '') {
       await checked('index.json');
       const result = [];
-      const pending = [''];
+      if (prefix) await checked(prefix);
+      await local(base);
+      let ancestor = base;
+      for (const part of prefix.split('/').filter(Boolean)) { ancestor = path.join(ancestor, part); await local(ancestor); }
+      const pending = [prefix];
       while (pending.length) {
         const relative = pending.pop();
         const dir = relative ? await checked(relative) : base;
@@ -116,6 +120,7 @@ function createDesktopNotesAdapter(root, { availability, io = fs.promises } = {}
         try { entries = await io.readdir(dir, { withFileTypes: true }); } catch (err) { if (err.code === 'ENOENT') continue; throw err; }
         for (const entry of entries) {
           const name = relative ? relative + '/' + entry.name : entry.name;
+          if (entry.name.endsWith('.icloud')) throw fail('ECLOUD', 'Notes listing is incomplete');
           if (entry.isSymbolicLink()) throw fail('EINVAL', 'Symbolic link in notes');
           if (entry.isDirectory()) pending.push(name);
           else if (entry.isFile() && !entry.name.endsWith('.tmp')) result.push(name);

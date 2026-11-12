@@ -128,3 +128,19 @@ test('native conflict preservation and orphan recovery persist across reopening'
   assert.equal((await reopened.read(discovery.recoveredNoteIds[0])).html, '<p>Research</p>');
   assert.equal((await reopened.listConflicts()).length, 1);
 });
+test('scoped listing keeps root-relative names and avoids unrelated recovery subtrees', async (t) => {
+  const { adapter, root } = await fixture(t);
+  await adapter.writeDurable('recovery/editor-commands/o-one.json', '{}');
+  await adapter.writeDurable('recovery/observed-bodies/n-one/body.html', 'writing');
+  const scoped = createDesktopNotesAdapter(root, { availability: async (file) => file.includes('observed-bodies') ? 'unavailable' : 'local' });
+  assert.deepEqual(await scoped.list('recovery/editor-commands'), ['recovery/editor-commands/o-one.json']);
+  await assert.rejects(scoped.list(), { code: 'ECLOUD' });
+  await assert.rejects(scoped.list('../elsewhere'), { code: 'EINVAL' });
+});
+test('scoped listing rejects unavailable ancestors and placeholder intents', async (t) => {
+  const { adapter, root } = await fixture(t);
+  await adapter.writeDurable('recovery/editor-commands/.o-one.json.icloud', '');
+  await assert.rejects(adapter.list('recovery/editor-commands'), { code: 'ECLOUD' });
+  const blocked = createDesktopNotesAdapter(root, { availability: async (file) => file === path.join(root, 'recovery') ? 'unavailable' : 'local' });
+  await assert.rejects(blocked.list('recovery/missing'), { code: 'ECLOUD' });
+});

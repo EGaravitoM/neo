@@ -50,7 +50,7 @@ function createNotesHistory({ adapter, load, read, ensure, replaceCanonical, bef
   const listRevisions = async (noteId) => {
     id(noteId);
     const records = [];
-    for (const path of await adapter.list()) {
+    for (const path of await adapter.list('revisions/' + noteId)) {
       const match = /^revisions\/([^/]+)\/([^/]+)\.json$/.exec(path);
       if (!match || match[1] !== noteId) continue;
       records.push(required(await readRevision(noteId, match[2])).record);
@@ -59,7 +59,7 @@ function createNotesHistory({ adapter, load, read, ensure, replaceCanonical, bef
   };
   const listTrash = async () => {
     const records = [];
-    for (const path of await adapter.list()) {
+    for (const path of await adapter.list('trash')) {
       const match = /^trash\/([^/]+)\/record\.json$/.exec(path);
       if (!match) continue;
       const entry = required(await readTrash(match[1]));
@@ -328,7 +328,7 @@ function createNotesHistory({ adapter, load, read, ensure, replaceCanonical, bef
   };
   const recover = async (publishedVersion = null) => {
     const results = [];
-    for (const path of (await adapter.list()).filter((p) => /^recovery\/history-operations\/[^/]+\.json$/.test(p)).sort()) {
+    for (const path of (await adapter.list('recovery/history-operations')).filter((p) => /^recovery\/history-operations\/[^/]+\.json$/.test(p)).sort()) {
       const source = await adapter.read(path);
       if (source.status !== 'ok') { results.push({ path, status: source.status }); continue; }
       let plan;

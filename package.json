@@ -39,7 +39,11 @@
     "test:custom-notes-explorer": "electron scripts/planet-notes-explorer.e2e.js",
     "test:custom-notes-pocket-contract": "node --test scripts/planet-notes-pocket.test.js",
     "test:custom-notes-pocket": "node scripts/pocket-www.js && electron scripts/planet-notes-pocket.e2e.js",
-    "test:custom-notes-transfer-contract": "node --test scripts/planet-notes-transfer.test.js"
+    "test:custom-notes-transfer-contract": "node --test scripts/planet-notes-transfer.test.js",
+    "test:custom-notes-stress": "node scripts/planet-notes-stress.js --plan --profile full",
+    "test:custom-notes-stress-harness": "node --test scripts/planet-notes-stress.test.js",
+    "test:custom-notes-ui-stress": "electron scripts/planet-notes-ui-stress.e2e.js",
+    "test:custom-notes-app-stress": "electron scripts/planet-notes-app-stress.e2e.js"
   },
   "build": {
     "appId": "com.hughhowey.neo",

@@ -48,28 +48,37 @@ function canMove(index, itemId, parentId) {
   }
   return true;
 }
+/** One immutable ordering view per traversal, not one whole-book map per row. */
+function childOrdering(index, locale) {
+  const items = itemMap(index); const groups = new Map(index.groups.map(g => [g.id, g]));
+  const collator = new Intl.Collator(locale || undefined);
+  return (parentId) => {
+    const parent = parentId === null ? index.root : groups.get(parentId);
+    if (!parent) throw fail('ENOENT', 'Destination group no longer exists');
+    const children = parent.childOrder.map(id => items.get(id));
+    if (parent.sortMode === 'manual') return children;
+    return children.sort((a, b) => Number(groups.has(b.id)) - Number(groups.has(a.id)) || collator.compare(a.title, b.title));
+  };
+}
 /** Stable ties use the parent's stored sequence, independently of display mode. */
 function sortedChildren(index, parentId = null, locale) {
-  const parent = container(index, parentId); const items = itemMap(index);
-  const children = parent.childOrder.map((id) => items.get(id));
-  if (parent.sortMode === 'manual') return children;
-  const groups = new Set(index.groups.map((g) => g.id));
-  const collator = new Intl.Collator(locale || undefined);
-  return children.sort((a, b) => Number(groups.has(b.id)) - Number(groups.has(a.id)) || collator.compare(a.title, b.title));
+  return childOrdering(index, locale)(parentId);
 }
-/** Iterative flat tree: neither nesting nor collapsed navigation uses recursion. */
+/** Iterative flat tree with sibling ARIA metadata computed during the same walk. */
 function visibleTree(index, expanded, locale) {
-  const result = []; const groups = new Set(index.groups.map((g) => g.id));
-  const pending = sortedChildren(index, null, locale).reverse().map((item) => ({ item, depth: 0 }));
+  const result = []; const groups = new Set(index.groups.map(g => g.id));
+  const childrenOf = childOrdering(index, locale); const pending = [];
+  const push = (children, depth) => {
+    for (let i = children.length - 1; i >= 0; i--) pending.push({ item: children[i], depth, setSize: children.length, posInSet: i + 1 });
+  };
+  push(childrenOf(null), 0);
   while (pending.length) {
     const row = pending.pop(); row.kind = groups.has(row.item.id) ? 'group' : 'note'; result.push(row);
-    if (row.kind === 'group' && expanded.has(row.item.id)) {
-      const children = sortedChildren(index, row.item.id, locale);
-      for (let i = children.length - 1; i >= 0; i--) pending.push({ item: children[i], depth: row.depth + 1 });
-    }
+    if (row.kind === 'group' && expanded.has(row.item.id)) push(childrenOf(row.item.id), row.depth + 1);
   }
   return result;
 }
+
 function pathTo(index, id) {
   const groups = new Map(index.groups.map((g) => [g.id, g])); const result = []; const seen = new Set();
   while (id !== null && groups.has(id) && !seen.has(id)) { seen.add(id); const group = groups.get(id); result.push(group); id = group.parentId; }

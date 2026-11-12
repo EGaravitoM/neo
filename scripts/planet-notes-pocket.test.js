@@ -156,3 +156,14 @@ test('Pocket shared asset order includes every script before bridge initializati
     assert.ok(pack.includes("'" + file + "'"));
   }
 });
+test('Pocket scoped listings retain relative paths and check unavailable ancestors', async () => {
+  const d = fixture();
+  d.files.set('book-one/notes/recovery/editor-commands/o-one.json', '{}');
+  d.files.set('book-one/notes/recovery/observed-bodies/n-one/body.html', 'writing');
+  d.away.add('book-one/notes/recovery/observed-bodies');
+  assert.deepEqual(await d.adapter.list('recovery/editor-commands'), ['recovery/editor-commands/o-one.json']);
+  await assert.rejects(d.adapter.list(), { code: 'ECLOUD' });
+  d.away.add('book-one/notes/recovery');
+  await assert.rejects(d.adapter.list('recovery/missing'), { code: 'ECLOUD' });
+  await assert.rejects(d.adapter.list('../elsewhere'), { code: 'EINVAL' });
+});

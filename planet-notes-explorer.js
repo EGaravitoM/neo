@@ -8,7 +8,9 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
   const root = document.createElement('section'); root.id = 'notes-explorer';
   let owner = null; let generation = 0; let navigation = 0; let mode = null; let index = null;
   let queryText = ''; let scope = 'all'; let selectedLabels = new Set(); let trashText = '';
-  let list = null; let selectedWords = [];
+  let list = null; let selectedWords = []; let hydrationTimer = null;
+  const resultRows = new WeakMap();
+  const cancelHydrationRender = () => { if (hydrationTimer !== null) clearTimeout(hydrationTimer); hydrationTimer = null; };
   let canRestore = true; let model = null; let metadataUnavailable = false; let busy = false; let loadTask = null; const pending = new Map();
   const textOf = (html) => {
     const holder = document.createElement('template'); holder.innerHTML = html;
@@ -62,22 +64,38 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
     const results = root.querySelector('.notes-search-results'); if (!results) return;
     const focused = results.contains(document.activeElement) ? document.activeElement.closest('[data-result-key]')?.dataset.resultKey : null;
     const value = model.query({ text: queryText, scope, labelIds: [...selectedLabels], live: liveDocuments(owner) });
-    results.replaceChildren(); reportCoverage({ ...value.coverage, unavailable: value.coverage.unavailable + Number(metadataUnavailable), complete: value.coverage.complete && !metadataUnavailable, results: value.results.length });
+    reportCoverage({ ...value.coverage, unavailable: value.coverage.unavailable + Number(metadataUnavailable), complete: value.coverage.complete && !metadataUnavailable, results: value.results.length });
+    const existing = new Map([...results.children].map(row => [row.dataset.resultKey, row]));
+    let cursor = results.firstElementChild;
     for (const result of value.results) {
-      const row = button('', async () => {
-        const book = owner; const turn = generation;
-        selectedWords = search.words(queryText);
-        await openDocument(result.document, result);
-        if (sameOwner(book, turn)) highlight();
-      }, 'open-result');
-      row.className = 'nav-item notes-item notes-search-result'; row.dataset.resultKey = search.key(result.document);
-      const line = node('div', undefined, 'n-row'); line.append(node('span', result.title || t('Untitled'), 'n-label')); row.append(line);
-      row.append(node('div', result.location || result.groupPath || t('Top level'), 'notes-result-location'));
-      row.append(node('div', result.status === 'ok' ? result.excerpt : t('This note is not available on this device yet.'), 'nav-note nav-note-ro'));
-      results.append(row);
+      const key = search.key(result.document); let row = existing.get(key); let entry;
+      if (row) entry = resultRows.get(row);
+      else {
+        entry = { result };
+        row = button('', async () => {
+          const book = owner; const turn = generation;
+          selectedWords = search.words(queryText);
+          await openDocument(entry.result.document, entry.result);
+          if (sameOwner(book, turn)) highlight();
+        }, 'open-result');
+        row.className = 'nav-item notes-item notes-search-result'; row.dataset.resultKey = key;
+        const line = node('div', undefined, 'n-row'); entry.title = node('span', '', 'n-label'); line.append(entry.title); row.append(line);
+        entry.location = node('div', '', 'notes-result-location'); entry.excerpt = node('div', '', 'nav-note nav-note-ro'); row.append(entry.location, entry.excerpt);
+        resultRows.set(row, entry);
+      }
+      entry.result = result;
+      for (const [element, text] of [[entry.title, result.title || t('Untitled')], [entry.location, result.location || result.groupPath || t('Top level')], [entry.excerpt, result.status === 'ok' ? result.excerpt : t('This note is not available on this device yet.')]]) if (element.textContent !== text) element.textContent = text;
+      if (row !== cursor) results.insertBefore(row, cursor);
+      cursor = row.nextElementSibling; existing.delete(key);
     }
-    if (focused) [...results.children].find((row) => row.dataset.resultKey === focused)?.focus();
+    for (const row of existing.values()) row.remove();
+    if (focused && document.activeElement?.dataset.resultKey !== focused) [...results.children].find(row => row.dataset.resultKey === focused)?.focus();
   };
+  const scheduleHydrationRender = (book, turn) => {
+    if (hydrationTimer !== null) return;
+    hydrationTimer = setTimeout(() => { hydrationTimer = null; if (sameOwner(book, turn)) renderResults(); }, 16);
+  };
+
   const searchForm = (focus = true) => {
     const form = node('form', undefined, 'notes-explorer-form'); form.setAttribute('aria-label', t('Search notes'));
     const label = node('label', t('Search notes')); const input = node('input'); input.type = 'search'; input.value = queryText; input.dataset.notesSearch = 'query'; label.append(input); form.append(label);
@@ -102,6 +120,7 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
   };
   const startSearch = async (background = false) => {
     const book = owner; const turn = generation;
+    cancelHydrationRender();
     model = search.createNotesSearch({ textOf, locale: locale() });
     let loaded;
     try { loaded = await call('notesLoad', book); }
@@ -131,9 +150,10 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
         if (!sameOwner(book, turn) || mode !== 'search') return;
         if (task.document.kind === 'chapter' && result.status === 'missing') model.upsert({ ...task, status: 'absent', html: '' });
         else model.upsert({ ...task, ...result, ...(task.document.kind === 'book' && result.status === 'missing' ? { status: 'ok', html: '' } : {}) });
-        renderResults();
+        scheduleHydrationRender(book, turn);
       }));
     }
+    if (sameOwner(book, turn) && mode === 'search') { cancelHydrationRender(); renderResults(); }
   };
   const fieldName = (field) => ({ title: t('Title'), name: t('Label name'), parentId: t('Group'), labelIds: t('Labels'), sortMode: t('Ordering'), childOrder: t('Sequence'), '*': t('Item') })[field];
   const describe = (choice, side, record) => {
@@ -252,7 +272,7 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
     }
   };
   const setMode = async (value) => {
-    generation++; navigation++; clearHighlights(); mode = value;
+    generation++; navigation++; cancelHydrationRender(); clearHighlights(); mode = value;
     onMode(!!mode); render();
     if (!mode) { await closePreview(true); return; }
     if (mode === 'search') { await closePreview(true); loadTask = startSearch(); await loadTask; }
@@ -270,7 +290,7 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
     edited() { if (mode === 'search') { renderResults(); highlight(); } },
     navigated() { navigation++; clearHighlights(); },
     async refresh() { if (!busy && mode === 'search' && !root.contains(document.activeElement)) { generation++; loadTask = startSearch(true); await loadTask; } },
-    detach() { owner = null; generation++; navigation++; mode = null; clearHighlights(); root.remove(); onMode(false); },
+    detach() { cancelHydrationRender(); owner = null; generation++; navigation++; mode = null; clearHighlights(); root.remove(); onMode(false); },
     isOpen: () => !!mode,
     settled: () => loadTask || Promise.resolve()
   };

@@ -33,7 +33,7 @@ function createNotesRecovery({ adapter, load, read, ensure, replaceCanonical, ge
   };
   const listConflicts = async () => {
     const records = [];
-    for (const path of await adapter.list()) {
+    for (const path of await adapter.list('conflicts')) {
       const match = /^conflicts\/([^/]+)\.json$/.exec(path);
       if (match) records.push(required(await readConflict(match[1])).record);
     }
@@ -447,7 +447,7 @@ function createNotesRecovery({ adapter, load, read, ensure, replaceCanonical, ge
   };
   const recover = async (publishedVersion = null) => {
     const results = [];
-    for (const path of (await adapter.list()).filter((p) => /^recovery\/reconcile-operations\/[^/]+\.json$/.test(p)).sort()) {
+    for (const path of (await adapter.list('recovery/reconcile-operations')).filter((p) => /^recovery\/reconcile-operations\/[^/]+\.json$/.test(p)).sort()) {
       const source = await adapter.read(path);
       if (source.status !== 'ok') { results.push({ path, status: source.status }); continue; }
       if (publishedVersion !== null) {

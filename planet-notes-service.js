@@ -127,7 +127,7 @@ function createNotesService({ getBook, enabled = false, makeId = (prefix) => pre
   // A prepared command may not yet have a store intent. Settle it before ANY
   // later command is compiled, including after a service restart.
   const settle = async (ctx, except = null) => {
-    for (const path of (await ctx.adapter.list()).filter((p) => /^recovery\/editor-commands\/[^/]+\.json$/.test(p)).sort()) {
+    for (const path of (await ctx.adapter.list('recovery/editor-commands')).filter((p) => /^recovery\/editor-commands\/[^/]+\.json$/.test(p)).sort()) {
       const source = required(await ctx.adapter.read(path));
       let record;
       try { record = JSON.parse(source.text); } catch { throw fail('EINVAL', 'Corrupt prepared editor command'); }

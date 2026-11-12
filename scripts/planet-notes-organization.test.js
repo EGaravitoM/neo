@@ -118,3 +118,11 @@ test('tree traversal and ancestor paths are iterative and reflect expansion', ()
 test('domain validation refuses raw filesystem fields and malformed organization actions', () => {
   for (const request of [null, { operationId: 'o-test', action: 'move', itemId: 'n-first', parentId: null, path: '../x' }, { operationId: 'o-test', action: 'sort', parentId: null, sortMode: 'random' }, { operationId: 'o-test', action: 'assignLabel', noteId: 'n-first', labelId: 'l-one', assigned: 'yes' }]) assert.throws(() => domain.validateAction(request), { code: 'EINVAL' });
 });
+test('expanded tree sibling positions match displayed manual/alphabetical ordering', () => {
+  const index = fixture(); const rows = domain.visibleTree(index, new Set(index.groups.map(g => g.id)), 'en');
+  for (const row of rows) {
+    const siblings = domain.sortedChildren(index, row.item.parentId, 'en');
+    assert.equal(row.setSize, siblings.length); assert.equal(row.posInSet, siblings.findIndex(item => item.id === row.item.id) + 1);
+  }
+  assert.equal(new Set(rows.map(row => row.item.id)).size, index.notes.length + index.groups.length);
+});
