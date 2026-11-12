@@ -1,0 +1,2649 @@
+{
+  "schemaVersion": 1,
+  "seed": 7301,
+  "profile": "full domain + renderer + selected full-app storage",
+  "createdAt": "2026-11-12T19:12:38.703Z",
+  "environment": {
+    "node": "v22.23.4",
+    "platform": "darwin",
+    "arch": "arm64",
+    "osRelease": "27.0.0",
+    "cpu": "Apple M1 Pro",
+    "commit": "004a5335c3aba750731d0f4670eadaa4ef3e39a1",
+    "dirty": true
+  },
+  "fixtureSizesAreProductLimits": false,
+  "releaseReady": false,
+  "gates": [
+    {
+      "id": "domain-stress",
+      "requirement": "Large/deep hierarchy, search and preserved material",
+      "status": "passed",
+      "evidence": [
+        "stress-results/stage7-domain-final-followup.json: full profile, simulated storage faults and repeated observed conflicts"
+      ]
+    },
+    {
+      "id": "storage-faults",
+      "requirement": "Every prepared-save write checkpoint and unavailable inputs",
+      "status": "passed",
+      "evidence": [
+        "stress-results/stage7-domain-final-followup.json: full profile, simulated storage faults and repeated observed conflicts"
+      ]
+    },
+    {
+      "id": "sync-races",
+      "requirement": "Repeated external edits without discarding observed versions",
+      "status": "passed",
+      "evidence": [
+        "stress-results/stage7-domain-final-followup.json: full profile, simulated storage faults and repeated observed conflicts"
+      ]
+    },
+    {
+      "id": "desktop-ui",
+      "requirement": "Large/deep real Notes interface and responsive editing/search",
+      "status": "partial",
+      "evidence": [
+        "All seven renderer profiles and full app 10,000-note cold load completed",
+        "First matching result 322ms; complete cold load179.1s; performance acceptance remains open"
+      ]
+    },
+    {
+      "id": "accessibility",
+      "requirement": "Keyboard alternatives, drag/drop destinations, focus and screen-reader checks",
+      "status": "partial",
+      "evidence": [
+        "Exact End, keyboard management, drag destination and focus regressions passed",
+        "Chromium AX inspection found named searchbox/tree/treeitems: app-smoke-release-inspection.json",
+        "Manual screen-reader testing not completed"
+      ]
+    },
+    {
+      "id": "fonts-themes",
+      "requirement": "Inherited UI font, selected writing font, supported page themes",
+      "status": "passed",
+      "evidence": [
+        "All seven ui-*-available-first.json profiles: UI font inheritance, two selected writing fonts and theme checks",
+        "Actual desktop Night/Paper/Light snapshots visually inspected: stress-results/release-ui-inspection-final; default hover pane overlays the narrow viewport using existing app behavior"
+      ]
+    },
+    {
+      "id": "backup-duplication",
+      "requirement": "Complete notes recovery state and independent duplicates",
+      "status": "passed",
+      "evidence": [
+        "npm test: transfer fault/race/independence contracts",
+        "Pocket stable-source duplication integration"
+      ]
+    },
+    {
+      "id": "regressions",
+      "requirement": "Existing Node and Electron suites, ordinary-launch feature gate",
+      "status": "passed",
+      "evidence": [
+        "635 Node tests passed; Planet Notes lint and git diff --check passed",
+        "All seven final renderer profiles passed",
+        "Editor, organization, explorer, disabled gate, Pocket and legacy Notes: *-all-final.log passed",
+        "Controlled delayed-preview/abandoned-transition, pending/live search, bulk focus and row identity regressions passed"
+      ]
+    },
+    {
+      "id": "pocket-ui",
+      "requirement": "Required Pocket workflows in the shared interface",
+      "status": "passed",
+      "evidence": [
+        "stress-results/test-custom-notes-pocket-all-final.log: actual Pocket page and simulated Capacitor storage; native device certification remains separate"
+      ]
+    },
+    {
+      "id": "native-ios",
+      "requirement": "Native iCloud, replacement durability, links and suspension",
+      "status": "not-run",
+      "evidence": []
+    },
+    {
+      "id": "native-android",
+      "requirement": "Native storage, permissions, links and suspension",
+      "status": "not-run",
+      "evidence": []
+    },
+    {
+      "id": "compatibility",
+      "requirement": "Older-version limitations checked and documented",
+      "status": "passed",
+      "evidence": [
+        "PLANET-NOTES-COMPATIBILITY.md: source audit limited to upstream v1.6.4"
+      ]
+    },
+    {
+      "id": "performance-review",
+      "requirement": "Measured findings resolved or explicitly reviewed",
+      "status": "partial",
+      "evidence": [
+        "app-wide-10000-incremental-results.json: first result322ms, full cold hydration179.1s, durable observation writes116.5s",
+        "Tree retention substantially improves expansion; remaining delays need explicit acceptance",
+        "Longer test budget is not a product limit or automatic latency acceptance"
+      ]
+    }
+  ],
+  "results": [
+    {
+      "id": "wide-100",
+      "scope": "Node worker; not UI/native evidence",
+      "status": "passed",
+      "fixture": {
+        "notes": 100,
+        "groups": 10,
+        "depth": 1
+      },
+      "samples": [
+        {
+          "iteration": 0,
+          "phase": "first",
+          "validationMs": 0.8461660000000037,
+          "treeMs": 0.8423329999999964,
+          "searchBuildMs": 1.1072500000000005,
+          "queryMs": 0.4009579999999957,
+          "scheduledTimerDelayMs": 1.5911249999999981,
+          "heapDeltaBytes": 376080
+        },
+        {
+          "iteration": 1,
+          "phase": "repeat",
+          "validationMs": 0.1376249999999999,
+          "treeMs": 0.10758300000000531,
+          "searchBuildMs": 0.8389170000000021,
+          "queryMs": 0.150624999999998,
+          "scheduledTimerDelayMs": 1.3475000000000037,
+          "heapDeltaBytes": -162192
+        },
+        {
+          "iteration": 2,
+          "phase": "repeat",
+          "validationMs": 0.1807499999999962,
+          "treeMs": 0.1090419999999952,
+          "searchBuildMs": 0.17291600000000074,
+          "queryMs": 0.14537499999999426,
+          "scheduledTimerDelayMs": 1.345166000000006,
+          "heapDeltaBytes": 623256
+        }
+      ],
+      "queryP50Ms": 0.150624999999998,
+      "queryP95Ms": 0.4009579999999957,
+      "peakRssBytes": 59932672
+    },
+    {
+      "id": "wide-1000",
+      "scope": "Node worker; not UI/native evidence",
+      "status": "passed",
+      "fixture": {
+        "notes": 1000,
+        "groups": 32,
+        "depth": 1
+      },
+      "samples": [
+        {
+          "iteration": 0,
+          "phase": "first",
+          "validationMs": 2.08925,
+          "treeMs": 1.5212919999999954,
+          "searchBuildMs": 4.451582999999999,
+          "queryMs": 1.4627499999999998,
+          "scheduledTimerDelayMs": 4.493292000000004,
+          "heapDeltaBytes": 1781880
+        },
+        {
+          "iteration": 1,
+          "phase": "repeat",
+          "validationMs": 0.9277909999999991,
+          "treeMs": 0.563083000000006,
+          "searchBuildMs": 2.8100829999999988,
+          "queryMs": 1.0493330000000043,
+          "scheduledTimerDelayMs": 3.2455,
+          "heapDeltaBytes": 1269592
+        },
+        {
+          "iteration": 2,
+          "phase": "repeat",
+          "validationMs": 0.9252090000000024,
+          "treeMs": 0.6543749999999946,
+          "searchBuildMs": 2.421541999999995,
+          "queryMs": 0.958625000000005,
+          "scheduledTimerDelayMs": 2.4430830000000014,
+          "heapDeltaBytes": -1593376
+        }
+      ],
+      "queryP50Ms": 1.0493330000000043,
+      "queryP95Ms": 1.4627499999999998,
+      "peakRssBytes": 70172672
+    },
+    {
+      "id": "wide-10000",
+      "scope": "Node worker; not UI/native evidence",
+      "status": "passed",
+      "fixture": {
+        "notes": 10000,
+        "groups": 100,
+        "depth": 1
+      },
+      "samples": [
+        {
+          "iteration": 0,
+          "phase": "first",
+          "validationMs": 10.224332999999994,
+          "treeMs": 7.2394999999999925,
+          "searchBuildMs": 87.814375,
+          "queryMs": 12.306958000000009,
+          "scheduledTimerDelayMs": 87.86883299999998,
+          "heapDeltaBytes": 14479432
+        },
+        {
+          "iteration": 1,
+          "phase": "repeat",
+          "validationMs": 7.645499999999998,
+          "treeMs": 5.3164580000000115,
+          "searchBuildMs": 45.948542,
+          "queryMs": 10.385499999999979,
+          "scheduledTimerDelayMs": 46.01054199999999,
+          "heapDeltaBytes": -2620112
+        },
+        {
+          "iteration": 2,
+          "phase": "repeat",
+          "validationMs": 7.548583000000008,
+          "treeMs": 4.68429100000003,
+          "searchBuildMs": 42.711749999999995,
+          "queryMs": 10.42516599999999,
+          "scheduledTimerDelayMs": 42.75233400000002,
+          "heapDeltaBytes": -3624920
+        }
+      ],
+      "queryP50Ms": 10.42516599999999,
+      "queryP95Ms": 12.306958000000009,
+      "peakRssBytes": 148684800
+    },
+    {
+      "id": "deep-100",
+      "scope": "Node worker; not UI/native evidence",
+      "status": "passed",
+      "fixture": {
+        "notes": 1,
+        "groups": 100,
+        "depth": 100
+      },
+      "samples": [
+        {
+          "iteration": 0,
+          "phase": "first",
+          "validationMs": 0.9008750000000063,
+          "treeMs": 0.7796670000000034,
+          "searchBuildMs": 0.302665999999995,
+          "queryMs": 0.15862500000000068,
+          "scheduledTimerDelayMs": 1.4596249999999955,
+          "heapDeltaBytes": 137960
+        },
+        {
+          "iteration": 1,
+          "phase": "repeat",
+          "validationMs": 0.1708330000000018,
+          "treeMs": 0.1058749999999975,
+          "searchBuildMs": 0.05250000000000199,
+          "queryMs": 0.045417000000000485,
+          "scheduledTimerDelayMs": 1.270667000000003,
+          "heapDeltaBytes": 360584
+        },
+        {
+          "iteration": 2,
+          "phase": "repeat",
+          "validationMs": 0.19941599999999937,
+          "treeMs": 0.11050000000000182,
+          "searchBuildMs": 0.0453329999999994,
+          "queryMs": 0.03395799999999838,
+          "scheduledTimerDelayMs": 1.3317910000000026,
+          "heapDeltaBytes": -436208
+        }
+      ],
+      "queryP50Ms": 0.045417000000000485,
+      "queryP95Ms": 0.15862500000000068,
+      "peakRssBytes": 59654144
+    },
+    {
+      "id": "deep-1000",
+      "scope": "Node worker; not UI/native evidence",
+      "status": "passed",
+      "fixture": {
+        "notes": 1,
+        "groups": 1000,
+        "depth": 1000
+      },
+      "samples": [
+        {
+          "iteration": 0,
+          "phase": "first",
+          "validationMs": 3.193375000000003,
+          "treeMs": 1.7484579999999994,
+          "searchBuildMs": 0.6132080000000002,
+          "queryMs": 0.18825000000000358,
+          "scheduledTimerDelayMs": 3.230166000000004,
+          "heapDeltaBytes": 1038920
+        },
+        {
+          "iteration": 1,
+          "phase": "repeat",
+          "validationMs": 1.6645830000000004,
+          "treeMs": 0.6304160000000039,
+          "searchBuildMs": 0.2774169999999998,
+          "queryMs": 0.060040999999998235,
+          "scheduledTimerDelayMs": 1.6892920000000018,
+          "heapDeltaBytes": -337776
+        },
+        {
+          "iteration": 2,
+          "phase": "repeat",
+          "validationMs": 1.5627080000000007,
+          "treeMs": 0.533332999999999,
+          "searchBuildMs": 0.2326669999999993,
+          "queryMs": 0.04733399999999932,
+          "scheduledTimerDelayMs": 1.7268749999999997,
+          "heapDeltaBytes": -409688
+        }
+      ],
+      "queryP50Ms": 0.060040999999998235,
+      "queryP95Ms": 0.18825000000000358,
+      "peakRssBytes": 63979520
+    },
+    {
+      "id": "deep-5000",
+      "scope": "Node worker; not UI/native evidence",
+      "status": "passed",
+      "fixture": {
+        "notes": 1,
+        "groups": 5000,
+        "depth": 5000
+      },
+      "samples": [
+        {
+          "iteration": 0,
+          "phase": "first",
+          "validationMs": 10.455999999999996,
+          "treeMs": 5.129166000000005,
+          "searchBuildMs": 1.887833999999998,
+          "queryMs": 0.34754099999999966,
+          "scheduledTimerDelayMs": 10.503707999999996,
+          "heapDeltaBytes": 6135136
+        },
+        {
+          "iteration": 1,
+          "phase": "repeat",
+          "validationMs": 7.722000000000001,
+          "treeMs": 5.8579579999999964,
+          "searchBuildMs": 1.3473749999999995,
+          "queryMs": 0.13083400000000722,
+          "scheduledTimerDelayMs": 8.051082999999998,
+          "heapDeltaBytes": -3092256
+        },
+        {
+          "iteration": 2,
+          "phase": "repeat",
+          "validationMs": 7.9702079999999995,
+          "treeMs": 2.963000000000008,
+          "searchBuildMs": 1.0372500000000002,
+          "queryMs": 0.13487500000000807,
+          "scheduledTimerDelayMs": 8.00379199999999,
+          "heapDeltaBytes": 1256872
+        }
+      ],
+      "queryP50Ms": 0.13487500000000807,
+      "queryP95Ms": 0.34754099999999966,
+      "peakRssBytes": 96075776
+    },
+    {
+      "id": "mixed-3000",
+      "scope": "Node worker; not UI/native evidence",
+      "status": "passed",
+      "fixture": {
+        "notes": 3000,
+        "groups": 200,
+        "depth": 40
+      },
+      "samples": [
+        {
+          "iteration": 0,
+          "phase": "first",
+          "validationMs": 5.3331249999999955,
+          "treeMs": 2.4392080000000007,
+          "searchBuildMs": 34.434792,
+          "queryMs": 5.181375000000003,
+          "scheduledTimerDelayMs": 34.75212499999999,
+          "heapDeltaBytes": 2795384
+        },
+        {
+          "iteration": 1,
+          "phase": "repeat",
+          "validationMs": 2.5711669999999884,
+          "treeMs": 1.5782919999999905,
+          "searchBuildMs": 26.001707999999994,
+          "queryMs": 3.580791000000005,
+          "scheduledTimerDelayMs": 26.059917,
+          "heapDeltaBytes": -1077048
+        },
+        {
+          "iteration": 2,
+          "phase": "repeat",
+          "validationMs": 2.2270409999999856,
+          "treeMs": 1.5545840000000055,
+          "searchBuildMs": 26.61375000000001,
+          "queryMs": 3.187250000000006,
+          "scheduledTimerDelayMs": 27.051333,
+          "heapDeltaBytes": 748216
+        }
+      ],
+      "queryP50Ms": 3.580791000000005,
+      "queryP95Ms": 5.181375000000003,
+      "peakRssBytes": 108838912
+    },
+    {
+      "id": "storage-faults",
+      "scope": "Simulated I/O; not native durability",
+      "status": "passed",
+      "checkpoints": [
+        {
+          "occurrence": 1,
+          "status": "passed"
+        },
+        {
+          "occurrence": 2,
+          "status": "passed"
+        },
+        {
+          "occurrence": 3,
+          "status": "passed"
+        },
+        {
+          "occurrence": 4,
+          "status": "passed"
+        },
+        {
+          "occurrence": 5,
+          "status": "passed"
+        },
+        {
+          "occurrence": 6,
+          "status": "passed"
+        },
+        {
+          "occurrence": 7,
+          "status": "passed"
+        },
+        {
+          "occurrence": 8,
+          "status": "passed"
+        },
+        {
+          "occurrence": 9,
+          "status": "passed"
+        },
+        {
+          "occurrence": 10,
+          "status": "passed"
+        },
+        {
+          "occurrence": 11,
+          "status": "passed"
+        }
+      ],
+      "unavailableInputs": 2
+    },
+    {
+      "id": "sync-races",
+      "scope": "Simulated external file edits; not cloud-provider certification",
+      "status": "passed",
+      "rounds": 12
+    }
+  ],
+  "findings": [
+    {
+      "id": "full-app-hydration",
+      "status": "open",
+      "evidence": "stress-results/app-wide-10000-incremental-results.json",
+      "description": "Full 10,000-note cold load now completes with first result322ms and hydration179.1s. Durable observations account for116.5s. Review acceptable latency before release; no size limit or weaker durability authorized."
+    },
+    {
+      "id": "repeated-tree-render",
+      "status": "open",
+      "evidence": "stress-results/ui-*-available-first.json",
+      "description": "Retained rows remove repeated reconstruction and improve cumulative expansion substantially. Remaining large/deep input delays require performance acceptance; no product cap introduced."
+    },
+    {
+      "id": "explorer-test-instability",
+      "status": "resolved",
+      "evidence": "scripts/planet-notes-explorer.e2e.js controlled preview-close regression; explorer-transition-repeat-0/1/2.log; test-custom-notes-explorer-all-final.log",
+      "description": "Identified pending preview transition now owns settled promise and checks generation before loading; abandoned search cannot resume. Original failure artifacts retained."
+    }
+  ],
+  "uiScenarios": [
+    {
+      "id": "large-tree",
+      "checks": [
+        "all expanded items reachable",
+        "stable identities and duplicate names",
+        "no console errors"
+      ],
+      "metrics": [
+        "loadMs",
+        "expandMs",
+        "domNodes",
+        "memoryBytes",
+        "inputDelayMs"
+      ],
+      "status": "passed",
+      "evidence": [
+        "All seven final renderer profiles: complete expanded identities, retained rows and no console errors; component bridge scope"
+      ]
+    },
+    {
+      "id": "deep-tree",
+      "checks": [
+        "leaf opens",
+        "ancestor navigation and move destinations",
+        "no stack overflow"
+      ],
+      "metrics": [
+        "expandMs",
+        "leafOpenMs",
+        "inputDelayMs"
+      ],
+      "status": "partial",
+      "evidence": [
+        "Leaf opening, exact End and full depth pass through5,000 groups; full deep move-destination/manual navigation matrix not certified"
+      ]
+    },
+    {
+      "id": "live-search",
+      "checks": [
+        "unsaved words match",
+        "unavailable coverage explicit",
+        "screen-only highlights"
+      ],
+      "metrics": [
+        "queryP50Ms",
+        "queryP95Ms",
+        "inputDelayMs"
+      ],
+      "status": "passed",
+      "evidence": [
+        "Final renderer profiles plus explorer E2E: live edits, explicit unknown coverage, screen-only highlights and input probes"
+      ]
+    },
+    {
+      "id": "keyboard-drag",
+      "checks": [
+        "operations without dragging",
+        "destination preview",
+        "cycle rejected",
+        "focus returns"
+      ],
+      "metrics": [
+        "operationMs"
+      ],
+      "status": "partial",
+      "evidence": [
+        "Real keyboard events and browser DragEvent destination/cycle checks pass; native pointer and manual screen-reader verification remain open"
+      ]
+    },
+    {
+      "id": "fonts-themes",
+      "checks": [
+        "computed UI font matches existing navigation",
+        "two selected body fonts match editor and recovery preview",
+        "Night/Paper/Light styling",
+        "no decoration in saved HTML"
+      ],
+      "metrics": [],
+      "status": "passed",
+      "evidence": [
+        "Computed fonts across all seven profiles plus actual desktop theme snapshots inspected"
+      ]
+    },
+    {
+      "id": "pocket-recovery",
+      "checks": [
+        "touch navigation and existing-note editing",
+        "read-only trash/conflicts",
+        "no management or restore commands",
+        "quiet failure and retry"
+      ],
+      "metrics": [
+        "noteOpenMs",
+        "queryP95Ms"
+      ],
+      "status": "partial",
+      "evidence": [
+        "Actual Pocket page with simulated Capacitor browsing/editing/search/recovery passed; native touch/device behavior not certified"
+      ]
+    }
+  ],
+  "execution": "completed",
+  "runs": 3,
+  "caseTimeoutMs": 120000,
+  "cases": [
+    {
+      "id": "wide-100",
+      "noteCount": 100,
+      "groupCount": 10,
+      "depth": 1,
+      "status": "passed"
+    },
+    {
+      "id": "wide-1000",
+      "noteCount": 1000,
+      "groupCount": 32,
+      "depth": 1,
+      "status": "passed"
+    },
+    {
+      "id": "wide-10000",
+      "noteCount": 10000,
+      "groupCount": 100,
+      "depth": 1,
+      "status": "passed"
+    },
+    {
+      "id": "deep-100",
+      "noteCount": 1,
+      "groupCount": 100,
+      "depth": 100,
+      "status": "passed"
+    },
+    {
+      "id": "deep-1000",
+      "noteCount": 1,
+      "groupCount": 1000,
+      "depth": 1000,
+      "status": "passed"
+    },
+    {
+      "id": "deep-5000",
+      "noteCount": 1,
+      "groupCount": 5000,
+      "depth": 5000,
+      "status": "passed"
+    },
+    {
+      "id": "mixed-3000",
+      "noteCount": 3000,
+      "groupCount": 200,
+      "depth": 40,
+      "status": "passed"
+    }
+  ],
+  "storageScenarios": [
+    "each-save-write-checkpoint",
+    "unavailable-index-and-body",
+    "repeated-external-versions"
+  ],
+  "componentResults": [
+    {
+      "id": "wide-100",
+      "status": "passed",
+      "scope": "Actual renderer components/shared CSS; deterministic bridge, not full IPC/native I/O",
+      "fixture": {
+        "id": "wide-100",
+        "noteCount": 100,
+        "groupCount": 10,
+        "depth": 1
+      },
+      "metrics": {
+        "inputDelay": {
+          "expansion": {
+            "kind": "renderer scheduled input delivery; not hardware latency",
+            "sampleCount": 4,
+            "p50Ms": 0.40000003576278687,
+            "p95Ms": 15.600000023841858,
+            "maxMs": 15.600000023841858,
+            "samples": [
+              {
+                "deliveryDelayMs": 15.600000023841858,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 0.7999999523162842,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 0.40000003576278687,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 0.3999999761581421,
+                "handlerMs": 0
+              }
+            ]
+          },
+          "hydration": {
+            "kind": "renderer scheduled input delivery; not hardware latency",
+            "sampleCount": 2,
+            "p50Ms": 1.699999988079071,
+            "p95Ms": 59.30000001192093,
+            "maxMs": 59.30000001192093,
+            "samples": [
+              {
+                "deliveryDelayMs": 59.30000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 1.699999988079071,
+                "handlerMs": 0
+              }
+            ]
+          }
+        },
+        "mountMs": 34.10000002384186,
+        "expandMs": 65.89999997615814,
+        "leafOpenMs": 32.89999997615814,
+        "leafLabelWidth": 92.0625,
+        "searchLoadMs": 77,
+        "queryP50Ms": 0.10000002384185791,
+        "queryP95Ms": 2.600000023841858,
+        "domNodes": 705,
+        "rows": 110,
+        "fonts": [
+          {
+            "selected": "Georgia",
+            "ui": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "writing": "Georgia"
+          },
+          {
+            "selected": "Arial",
+            "ui": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "writing": "Arial"
+          }
+        ],
+        "themes": [
+          {
+            "theme": "night",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(170, 170, 170)"
+          },
+          {
+            "theme": "paper",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(170, 170, 170)"
+          },
+          {
+            "theme": "light",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(74, 70, 63)"
+          }
+        ],
+        "heapBytes": 10000000
+      }
+    },
+    {
+      "id": "wide-1000",
+      "status": "passed",
+      "scope": "Actual renderer components/shared CSS; deterministic bridge, not full IPC/native I/O",
+      "fixture": {
+        "id": "wide-1000",
+        "noteCount": 1000,
+        "groupCount": 32,
+        "depth": 1
+      },
+      "metrics": {
+        "inputDelay": {
+          "expansion": {
+            "kind": "renderer scheduled input delivery; not hardware latency",
+            "sampleCount": 21,
+            "p50Ms": 2.899999976158142,
+            "p95Ms": 12,
+            "maxMs": 13.100000023841858,
+            "samples": [
+              {
+                "deliveryDelayMs": 10.199999988079071,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 8.599999964237213,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 8.800000011920929,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 0.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 2.199999988079071,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 1.4000000357627869,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 1.2000000476837158,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 1.899999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 2.899999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 3.900000035762787,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 1.0999999642372131,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 6.800000011920929,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 7.300000011920929,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 4.199999988079071,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 12,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 2.800000011920929,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 2.399999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 0.6000000238418579,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 5.399999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 13.100000023841858,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 1.2999999523162842,
+                "handlerMs": 0
+              }
+            ]
+          },
+          "hydration": {
+            "kind": "renderer scheduled input delivery; not hardware latency",
+            "sampleCount": 2,
+            "p50Ms": 0.8999999761581421,
+            "p95Ms": 114.80000001192093,
+            "maxMs": 114.80000001192093,
+            "samples": [
+              {
+                "deliveryDelayMs": 114.80000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 0.8999999761581421,
+                "handlerMs": 0
+              }
+            ]
+          }
+        },
+        "mountMs": 4.699999988079071,
+        "expandMs": 419,
+        "leafOpenMs": 18.599999964237213,
+        "leafLabelWidth": 92.0625,
+        "searchLoadMs": 131.69999998807907,
+        "queryP50Ms": 0.8999999761581421,
+        "queryP95Ms": 5.5,
+        "domNodes": 6237,
+        "rows": 1032,
+        "fonts": [
+          {
+            "selected": "Georgia",
+            "ui": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "writing": "Georgia"
+          },
+          {
+            "selected": "Arial",
+            "ui": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "writing": "Arial"
+          }
+        ],
+        "themes": [
+          {
+            "theme": "night",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(170, 170, 170)"
+          },
+          {
+            "theme": "paper",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(170, 170, 170)"
+          },
+          {
+            "theme": "light",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(74, 70, 63)"
+          }
+        ],
+        "heapBytes": 10000000
+      }
+    },
+    {
+      "id": "wide-10000",
+      "status": "passed",
+      "scope": "Actual renderer components/shared CSS; deterministic bridge, not full IPC/native I/O",
+      "fixture": {
+        "id": "wide-10000",
+        "noteCount": 10000,
+        "groupCount": 100,
+        "depth": 1
+      },
+      "metrics": {
+        "inputDelay": {
+          "expansion": {
+            "kind": "renderer scheduled input delivery; not hardware latency",
+            "sampleCount": 96,
+            "p50Ms": 61.60000002384186,
+            "p95Ms": 143.60000002384186,
+            "maxMs": 168,
+            "samples": [
+              {
+                "deliveryDelayMs": 18.599999964237213,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 5.099999964237213,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 19.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 9.800000011920929,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 17.399999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 20.900000035762787,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 17,
+                "handlerMs": 0.09999996423721313
+              },
+              {
+                "deliveryDelayMs": 9.699999988079071,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 13.400000035762787,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 6.699999988079071,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 7.800000011920929,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 20.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 18.80000001192093,
+                "handlerMs": 0.09999996423721313
+              },
+              {
+                "deliveryDelayMs": 23.600000023841858,
+                "handlerMs": 0.09999996423721313
+              },
+              {
+                "deliveryDelayMs": 19.900000035762787,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 16.599999964237213,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 26,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 30.80000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 33.69999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 23.600000023841858,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 39,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 26,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 35.299999952316284,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 33.200000047683716,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 26.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 37,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 41,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 45.299999952316284,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 28.100000023841858,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 24.80000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 29.30000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 41.39999997615814,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 27.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 61.89999997615814,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 51.60000002384186,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 38.30000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 33.69999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 59,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 45,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 65.89999997615814,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 82.10000002384186,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 83.30000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 42.80000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 62.19999998807907,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 52.60000002384186,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 38.59999996423721,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 45.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 60.10000002384186,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 50,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 75.80000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 38.19999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 77.80000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 51.59999996423721,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 71.59999996423721,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 104,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 55.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 73.90000003576279,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 70.59999996423721,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 110.60000002384186,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 104.89999997615814,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 61.60000002384186,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 84.10000002384186,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 110.79999995231628,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 67.90000003576279,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 84.19999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 107.19999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 92.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 110.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 143.30000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 128.39999997615814,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 79.19999998807907,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 89.30000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 85.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 86.29999995231628,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 109.90000003576279,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 88,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 133.0999999642372,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 70.60000002384186,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 107.80000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 70.69999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 85.30000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 137.5999999642372,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 118.10000002384186,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 106.10000002384186,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 165.79999995231628,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 119.70000004768372,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 97.89999997615814,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 164.69999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 134,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 122.39999997615814,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 168,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 165.19999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 107.10000002384186,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 93.89999997615814,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 134.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 143.60000002384186,
+                "handlerMs": 0.10000002384185791
+              }
+            ]
+          },
+          "hydration": {
+            "kind": "renderer scheduled input delivery; not hardware latency",
+            "sampleCount": 2,
+            "p50Ms": 1.100000023841858,
+            "p95Ms": 1038.5,
+            "maxMs": 1038.5,
+            "samples": [
+              {
+                "deliveryDelayMs": 1038.5,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 1.100000023841858,
+                "handlerMs": 0.09999996423721313
+              }
+            ]
+          }
+        },
+        "mountMs": 6.300000011920929,
+        "expandMs": 7997.300000011921,
+        "leafOpenMs": 42.5,
+        "leafLabelWidth": 92.0625,
+        "searchLoadMs": 1055.800000011921,
+        "queryP50Ms": 8.300000011920929,
+        "queryP95Ms": 50.59999996423721,
+        "domNodes": 60645,
+        "rows": 10100,
+        "fonts": [
+          {
+            "selected": "Georgia",
+            "ui": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "writing": "Georgia"
+          },
+          {
+            "selected": "Arial",
+            "ui": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "writing": "Arial"
+          }
+        ],
+        "themes": [
+          {
+            "theme": "night",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(170, 170, 170)"
+          },
+          {
+            "theme": "paper",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(170, 170, 170)"
+          },
+          {
+            "theme": "light",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(74, 70, 63)"
+          }
+        ],
+        "heapBytes": 97400000
+      }
+    },
+    {
+      "id": "deep-100",
+      "status": "passed",
+      "scope": "Actual renderer components/shared CSS; deterministic bridge, not full IPC/native I/O",
+      "fixture": {
+        "id": "deep-100",
+        "noteCount": 1,
+        "groupCount": 100,
+        "depth": 100
+      },
+      "metrics": {
+        "inputDelay": {
+          "expansion": {
+            "kind": "renderer scheduled input delivery; not hardware latency",
+            "sampleCount": 2,
+            "p50Ms": 1.7999999523162842,
+            "p95Ms": 13.400000035762787,
+            "maxMs": 13.400000035762787,
+            "samples": [
+              {
+                "deliveryDelayMs": 13.400000035762787,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 1.7999999523162842,
+                "handlerMs": 0
+              }
+            ]
+          },
+          "hydration": {
+            "kind": "renderer scheduled input delivery; not hardware latency",
+            "sampleCount": 2,
+            "p50Ms": 1.699999988079071,
+            "p95Ms": 47.700000047683716,
+            "maxMs": 47.700000047683716,
+            "samples": [
+              {
+                "deliveryDelayMs": 47.700000047683716,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 1.699999988079071,
+                "handlerMs": 0
+              }
+            ]
+          }
+        },
+        "mountMs": 3.100000023841858,
+        "expandMs": 31.399999976158142,
+        "leafOpenMs": 21.600000023841858,
+        "leafLabelWidth": 92.0625,
+        "searchLoadMs": 65.40000003576279,
+        "queryP50Ms": 0.09999996423721313,
+        "queryP95Ms": 0.6000000238418579,
+        "domNodes": 651,
+        "rows": 101,
+        "fonts": [
+          {
+            "selected": "Georgia",
+            "ui": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "writing": "Georgia"
+          },
+          {
+            "selected": "Arial",
+            "ui": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "writing": "Arial"
+          }
+        ],
+        "themes": [
+          {
+            "theme": "night",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(170, 170, 170)"
+          },
+          {
+            "theme": "paper",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(170, 170, 170)"
+          },
+          {
+            "theme": "light",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(74, 70, 63)"
+          }
+        ],
+        "heapBytes": 10000000
+      }
+    },
+    {
+      "id": "deep-1000",
+      "status": "passed",
+      "scope": "Actual renderer components/shared CSS; deterministic bridge, not full IPC/native I/O",
+      "fixture": {
+        "id": "deep-1000",
+        "noteCount": 1,
+        "groupCount": 1000,
+        "depth": 1000
+      },
+      "metrics": {
+        "inputDelay": {
+          "expansion": {
+            "kind": "renderer scheduled input delivery; not hardware latency",
+            "sampleCount": 2,
+            "p50Ms": 1,
+            "p95Ms": 84.30000001192093,
+            "maxMs": 84.30000001192093,
+            "samples": [
+              {
+                "deliveryDelayMs": 84.30000001192093,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 1,
+                "handlerMs": 0.09999996423721313
+              }
+            ]
+          },
+          "hydration": {
+            "kind": "renderer scheduled input delivery; not hardware latency",
+            "sampleCount": 2,
+            "p50Ms": 0.8999999761581421,
+            "p95Ms": 46.19999998807907,
+            "maxMs": 46.19999998807907,
+            "samples": [
+              {
+                "deliveryDelayMs": 46.19999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 0.8999999761581421,
+                "handlerMs": 0
+              }
+            ]
+          }
+        },
+        "mountMs": 2.800000011920929,
+        "expandMs": 101.69999998807907,
+        "leafOpenMs": 24,
+        "leafLabelWidth": 92.0625,
+        "searchLoadMs": 63.09999996423721,
+        "queryP50Ms": 0.10000002384185791,
+        "queryP95Ms": 0.699999988079071,
+        "domNodes": 6051,
+        "rows": 1001,
+        "fonts": [
+          {
+            "selected": "Georgia",
+            "ui": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "writing": "Georgia"
+          },
+          {
+            "selected": "Arial",
+            "ui": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "writing": "Arial"
+          }
+        ],
+        "themes": [
+          {
+            "theme": "night",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(170, 170, 170)"
+          },
+          {
+            "theme": "paper",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(170, 170, 170)"
+          },
+          {
+            "theme": "light",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(74, 70, 63)"
+          }
+        ],
+        "heapBytes": 10000000
+      }
+    },
+    {
+      "id": "deep-5000",
+      "status": "passed",
+      "scope": "Actual renderer components/shared CSS; deterministic bridge, not full IPC/native I/O",
+      "fixture": {
+        "id": "deep-5000",
+        "noteCount": 1,
+        "groupCount": 5000,
+        "depth": 5000
+      },
+      "metrics": {
+        "inputDelay": {
+          "expansion": {
+            "kind": "renderer scheduled input delivery; not hardware latency",
+            "sampleCount": 2,
+            "p50Ms": 240.4000000357628,
+            "p95Ms": 325.30000001192093,
+            "maxMs": 325.30000001192093,
+            "samples": [
+              {
+                "deliveryDelayMs": 325.30000001192093,
+                "handlerMs": 0.09999996423721313
+              },
+              {
+                "deliveryDelayMs": 240.4000000357628,
+                "handlerMs": 0
+              }
+            ]
+          },
+          "hydration": {
+            "kind": "renderer scheduled input delivery; not hardware latency",
+            "sampleCount": 2,
+            "p50Ms": 1.399999976158142,
+            "p95Ms": 119.90000003576279,
+            "maxMs": 119.90000003576279,
+            "samples": [
+              {
+                "deliveryDelayMs": 119.90000003576279,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 1.399999976158142,
+                "handlerMs": 0.10000002384185791
+              }
+            ]
+          }
+        },
+        "mountMs": 5.200000047683716,
+        "expandMs": 582,
+        "leafOpenMs": 43.10000002384186,
+        "leafLabelWidth": 92.0625,
+        "searchLoadMs": 137.4000000357628,
+        "queryP50Ms": 0.19999998807907104,
+        "queryP95Ms": 0.699999988079071,
+        "domNodes": 30051,
+        "rows": 5001,
+        "fonts": [
+          {
+            "selected": "Georgia",
+            "ui": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "writing": "Georgia"
+          },
+          {
+            "selected": "Arial",
+            "ui": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "writing": "Arial"
+          }
+        ],
+        "themes": [
+          {
+            "theme": "night",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(170, 170, 170)"
+          },
+          {
+            "theme": "paper",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(170, 170, 170)"
+          },
+          {
+            "theme": "light",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(74, 70, 63)"
+          }
+        ],
+        "heapBytes": 10600000
+      }
+    },
+    {
+      "id": "mixed-3000",
+      "status": "passed",
+      "scope": "Actual renderer components/shared CSS; deterministic bridge, not full IPC/native I/O",
+      "fixture": {
+        "id": "mixed-3000",
+        "noteCount": 3000,
+        "groupCount": 200,
+        "depth": 40
+      },
+      "metrics": {
+        "inputDelay": {
+          "expansion": {
+            "kind": "renderer scheduled input delivery; not hardware latency",
+            "sampleCount": 173,
+            "p50Ms": 16.099999964237213,
+            "p95Ms": 39.5,
+            "maxMs": 49,
+            "samples": [
+              {
+                "deliveryDelayMs": 21.400000035762787,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 11.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 10,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 0.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 27.69999998807907,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 3.099999964237213,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 17.30000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 8.899999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 4.700000047683716,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 9.699999988079071,
+                "handlerMs": 0.09999996423721313
+              },
+              {
+                "deliveryDelayMs": 9,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 4,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 12.400000035762787,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 6.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 4.800000011920929,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 6.399999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 12.600000023841858,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 2.099999964237213,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 0,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 1.800000011920929,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 1.899999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 0.19999998807907104,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 0.40000003576278687,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 1.899999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 6.300000011920929,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 5.899999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 8.600000023841858,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 12.099999964237213,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 9.900000035762787,
+                "handlerMs": 0.09999996423721313
+              },
+              {
+                "deliveryDelayMs": 9.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 18.400000035762787,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 12.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 4.800000011920929,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 23.299999952316284,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 12.100000023841858,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 8.799999952316284,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 9.400000035762787,
+                "handlerMs": 0.09999996423721313
+              },
+              {
+                "deliveryDelayMs": 9.400000035762787,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 19.899999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 15.300000011920929,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 14.899999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 6.600000023841858,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 9.399999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 5.800000011920929,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 14.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 9,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 0.800000011920929,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 8.300000011920929,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 7.099999964237213,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 12.600000023841858,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 15.600000023841858,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 6.299999952316284,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 16.600000023841858,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 12,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 14.899999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 16,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 30,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 23.30000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 15.599999964237213,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 13.400000035762787,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 25.30000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 9,
+                "handlerMs": 0.09999996423721313
+              },
+              {
+                "deliveryDelayMs": 24.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 28.69999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 19.100000023841858,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 10.699999988079071,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 8.400000035762787,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 19.899999976158142,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 16.099999964237213,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 5.900000035762787,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 9.399999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 12.399999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 19.400000035762787,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 19.69999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 20.30000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 22.599999964237213,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 27,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 20.100000023841858,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 24.69999998807907,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 12.800000011920929,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 14.099999964237213,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 6.900000035762787,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 6.599999964237213,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 23.69999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 25.200000047683716,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 12.899999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 6.899999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 19.200000047683716,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 9.199999988079071,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 15.899999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 11.900000035762787,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 14.299999952316284,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 20.700000047683716,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 5.899999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 25.5,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 27.69999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 17.69999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 15.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 10.899999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 14.300000011920929,
+                "handlerMs": 0.09999996423721313
+              },
+              {
+                "deliveryDelayMs": 23.900000035762787,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 6.300000011920929,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 28.19999998807907,
+                "handlerMs": 0.09999996423721313
+              },
+              {
+                "deliveryDelayMs": 30.600000023841858,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 28.399999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 30.200000047683716,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 12.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 9.199999988079071,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 28.80000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 28.799999952316284,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 32.40000003576279,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 16.099999964237213,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 24.700000047683716,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 18.299999952316284,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 30.700000047683716,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 33.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 17.19999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 12.899999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 11,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 14.900000035762787,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 31.399999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 33.30000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 34.19999998807907,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 24.899999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 25.19999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 24.19999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 14.100000023841858,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 17,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 28.299999952316284,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 28.80000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 11.600000023841858,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 21.899999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 33,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 18,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 40.90000003576279,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 34.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 37.09999996423721,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 49,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 42.60000002384186,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 43.69999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 16,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 31.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 22.599999964237213,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 27.400000035762787,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 20.299999952316284,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 25.80000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 11.800000011920929,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 36.10000002384186,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 41,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 17.799999952316284,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 22.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 36.90000003576279,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 37,
+                "handlerMs": 0.09999996423721313
+              },
+              {
+                "deliveryDelayMs": 42.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 32.30000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 17.19999998807907,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 39.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 41.19999998807907,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 9,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 39.19999998807907,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 42.5,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 39.10000002384186,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 39.299999952316284,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 19.5,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 25.399999976158142,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 21.30000001192093,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 9.599999964237213,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 15.800000011920929,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 35.80000001192093,
+                "handlerMs": 0.10000002384185791
+              },
+              {
+                "deliveryDelayMs": 29.099999964237213,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 37.90000003576279,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 19.099999964237213,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 12.100000023841858,
+                "handlerMs": 0
+              }
+            ]
+          },
+          "hydration": {
+            "kind": "renderer scheduled input delivery; not hardware latency",
+            "sampleCount": 2,
+            "p50Ms": 0.5,
+            "p95Ms": 344,
+            "maxMs": 344,
+            "samples": [
+              {
+                "deliveryDelayMs": 344,
+                "handlerMs": 0
+              },
+              {
+                "deliveryDelayMs": 0.5,
+                "handlerMs": 0
+              }
+            ]
+          }
+        },
+        "mountMs": 5.800000011920929,
+        "expandMs": 5979.699999988079,
+        "leafOpenMs": 23.80000001192093,
+        "leafLabelWidth": 135.53125,
+        "searchLoadMs": 360.7000000476837,
+        "queryP50Ms": 3.299999952316284,
+        "queryP95Ms": 16.5,
+        "domNodes": 19245,
+        "rows": 3200,
+        "fonts": [
+          {
+            "selected": "Georgia",
+            "ui": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "writing": "Georgia"
+          },
+          {
+            "selected": "Arial",
+            "ui": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "writing": "Arial"
+          }
+        ],
+        "themes": [
+          {
+            "theme": "night",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(170, 170, 170)"
+          },
+          {
+            "theme": "paper",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(170, 170, 170)"
+          },
+          {
+            "theme": "light",
+            "font": "-apple-system, \"system-ui\", \"Helvetica Neue\", sans-serif",
+            "color": "rgb(74, 70, 63)"
+          }
+        ],
+        "heapBytes": 42100000
+      }
+    }
+  ],
+  "appResults": [
+    {
+      "id": "wide-1000",
+      "status": "passed",
+      "scope": "Actual desktop app/IPC/storage with temporary files",
+      "fixture": {
+        "id": "wide-1000",
+        "noteCount": 1000,
+        "groupCount": 32,
+        "depth": 1
+      },
+      "timeBudgetMs": 120000,
+      "metrics": {
+        "storageProfile": {
+          "adapter.list": {
+            "calls": 3030,
+            "totalMs": 3239.185206000102,
+            "maxMs": 53.983917000000474
+          },
+          "adapter.read": {
+            "calls": 4030,
+            "totalMs": 2104.3325740000446,
+            "maxMs": 17.680041999999958
+          },
+          "adapter.writeDurable": {
+            "calls": 1001,
+            "totalMs": 10975.000031999998,
+            "maxMs": 64.80049999999937
+          },
+          "service.load": {
+            "calls": 5,
+            "totalMs": 206.5005819999999,
+            "maxMs": 98.62679099999991
+          },
+          "service.read": {
+            "calls": 1001,
+            "totalMs": 41440.645411000005,
+            "maxMs": 192.45695800000067
+          },
+          "service.refresh": {
+            "calls": 3,
+            "totalMs": 205.42383300000074,
+            "maxMs": 77.94054200000028
+          }
+        },
+        "bookOpenMs": 416.390625,
+        "leafOpenMs": 98.29433400000016,
+        "firstResultMs": 434.90404100000023,
+        "searchLoadMs": 16969.495666,
+        "query": [
+          1.2416249999987485,
+          0.9179159999985131,
+          0.9935000000004948,
+          1.354209000000992,
+          1.0177499999990687
+        ],
+        "domNodes": 620
+      },
+      "phase": "completed",
+      "consoleErrors": []
+    },
+    {
+      "id": "wide-10000",
+      "status": "passed",
+      "scope": "Actual desktop app/IPC/storage with temporary files",
+      "fixture": {
+        "id": "wide-10000",
+        "noteCount": 10000,
+        "groupCount": 100,
+        "depth": 1
+      },
+      "timeBudgetMs": 360000,
+      "metrics": {
+        "storageProfile": {
+          "adapter.list": {
+            "calls": 30254,
+            "totalMs": 29778.921870999373,
+            "maxMs": 74.28120899999703
+          },
+          "adapter.read": {
+            "calls": 40254,
+            "totalMs": 25065.318680998716,
+            "maxMs": 58.05687500000931
+          },
+          "adapter.writeDurable": {
+            "calls": 10001,
+            "totalMs": 116453.17934300147,
+            "maxMs": 141.1118749999996
+          },
+          "service.load": {
+            "calls": 37,
+            "totalMs": 1917.2235410000603,
+            "maxMs": 266.2716660000001
+          },
+          "service.read": {
+            "calls": 10001,
+            "totalMs": 443288.01346699917,
+            "maxMs": 346.68995799999993
+          },
+          "service.refresh": {
+            "calls": 35,
+            "totalMs": 2604.702917999961,
+            "maxMs": 107.37975000000006
+          }
+        },
+        "bookOpenMs": 585.0905420000004,
+        "leafOpenMs": 188.29566699999987,
+        "firstResultMs": 322.35454200000004,
+        "searchLoadMs": 179057.453709,
+        "query": [
+          7.8140000000130385,
+          6.912083999981405,
+          7.907875000004424,
+          7.455374999990454,
+          7.79520799999591
+        ],
+        "domNodes": 1442
+      },
+      "phase": "completed",
+      "consoleErrors": []
+    },
+    {
+      "id": "smoke",
+      "status": "passed",
+      "scope": "Actual desktop app/IPC/storage with temporary files",
+      "fixture": {
+        "id": "smoke",
+        "noteCount": 20,
+        "groupCount": 4,
+        "depth": 2
+      },
+      "timeBudgetMs": 120000,
+      "metrics": {
+        "bookOpenMs": 141.000042,
+        "leafOpenMs": 97.00429199999996,
+        "firstResultMs": 78.22283399999992,
+        "searchLoadMs": 640.4834999999998,
+        "query": [
+          0.4071670000000722,
+          0.2708749999999327,
+          0.2625829999999496,
+          0.24920799999995324,
+          0.21249999999986358
+        ],
+        "accessibility": {
+          "namedSearchbox": true,
+          "namedTree": true,
+          "namedTreeItems": 6,
+          "scope": "Chromium accessibility tree, not manual VoiceOver or native mobile certification"
+        },
+        "domNodes": 242
+      },
+      "phase": "completed",
+      "consoleErrors": []
+    }
+  ],
+  "nativeLimitations": [
+    "No attached Android device; emulator and SDK environment not available",
+    "No Xcode application found; active developer directory CommandLineTools; iOS Simulator SDK missing",
+    "Manual screen-reader verification outstanding"
+  ],
+  "reviewCorrections": {
+    "nodeTests": 635,
+    "lint": "passed for changed verification files",
+    "rendererErrors": {
+      "status": "resolved",
+      "evidence": [
+        "stress-results/app-smoke-review-clean.json",
+        "stress-results/app-smoke-review-injected.json"
+      ],
+      "expectedInjectedResult": "failed"
+    },
+    "keyboardEnd": {
+      "status": "resolved",
+      "evidence": "Exact final visible identity asserted in all seven profiles; unchanged focus rejected by regression test"
+    },
+    "inputDelay": {
+      "status": "resolved",
+      "evidence": "Each componentResults entry includes raw expansion/hydration delivery delays; these do not certify hardware input latency or acceptable responsiveness"
+    }
+  },
+  "followupReview": {
+    "standardsFindings": 0,
+    "specFindings": 0,
+    "scope": "Read-only full Task7 diff from approved c3992be, with particular attention to current working followups; not release approval"
+  },
+  "source": {
+    "commit": "004a5335c3aba750731d0f4670eadaa4ef3e39a1",
+    "dirty": true,
+    "sha256": {
+      "app.js": "c604ad898e294840e0501f8120c5ae9c3197ca2b7fb3955850c9fc695ad608e4",
+      "planet-notes-tree.js": "104b703a848df9dc7220438478a8a43a452c1165b93f6b9dbb93b140b3f2116b",
+      "planet-notes-explorer.js": "f78821397b8e0ec444af8b985c7d3df0323cc4caba8d2feeb2b422aa7a147266",
+      "planet-notes-observer.js": "6b6e13faa62c3b4b68e21c874a5d56d7dc06075ab3d4f6a4e3f079f06ae4e45c",
+      "planet-notes-service.js": "44bb8b767810c0b296abc7c40f4ffeb7edd8ace3696f05efc37bec0ee55ee641",
+      "planet-notes-store.js": "20d3007954de74b02b50392bb53ac7602585925e693b1a25d5aafe68ad4a8757",
+      "planet-notes-desktop.js": "8c779b931958686c3d66312603e3af32e099deb99a4070b34f529a862902bf99",
+      "planet-notes-pocket.js": "3634c98e5036eeba60fe60d89ff9f3a58823487dfcb36bbc1f1b0d33e847657b",
+      "scripts/planet-notes-app-stress.e2e.js": "c14a4dd3a867d6558752b30413acf9d640edbe8cae914edac263a316cc4bd6f6",
+      "scripts/planet-notes-ui-stress.e2e.js": "03a1da680aeaac0ce4360c8e022d92ad6c4de7c39c8782fd3641f43ef3444b76"
+    }
+  }
+}

@@ -12,6 +12,9 @@
     "test:words": "electron scripts/words.e2e.js",
     "test:tabs": "electron scripts/tabs.e2e.js",
     "test:notes": "electron scripts/notes.e2e.js",
+    "test:custom-notes": "electron scripts/planet-notes-editor.e2e.js",
+    "test:custom-notes-organization": "electron scripts/planet-notes-organization.e2e.js",
+    "test:custom-notes-disabled": "electron scripts/planet-notes-editor.e2e.js --disabled",
     "test:footnotes": "electron scripts/footnotes.e2e.js",
     "test:cover-text": "electron scripts/cover-text.e2e.js",
     "test:caret": "electron scripts/caret.e2e.js",
@@ -32,7 +35,15 @@
     "package:mac": "electron-builder --mac",
     "package:win": "electron-builder --win",
     "package:linux": "electron-builder --linux",
-    "package:all": "electron-builder --mac --win --linux"
+    "package:all": "electron-builder --mac --win --linux",
+    "test:custom-notes-explorer": "electron scripts/planet-notes-explorer.e2e.js",
+    "test:custom-notes-pocket-contract": "node --test scripts/planet-notes-pocket.test.js",
+    "test:custom-notes-pocket": "node scripts/pocket-www.js && electron scripts/planet-notes-pocket.e2e.js",
+    "test:custom-notes-transfer-contract": "node --test scripts/planet-notes-transfer.test.js",
+    "test:custom-notes-stress": "node scripts/planet-notes-stress.js --plan --profile full",
+    "test:custom-notes-stress-harness": "node --test scripts/planet-notes-stress.test.js",
+    "test:custom-notes-ui-stress": "electron scripts/planet-notes-ui-stress.e2e.js",
+    "test:custom-notes-app-stress": "electron scripts/planet-notes-app-stress.e2e.js"
   },
   "build": {
     "appId": "com.hughhowey.neo",

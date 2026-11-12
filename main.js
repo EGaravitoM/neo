@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { Buffer } = require('buffer');
+const { bookCopyPolicy } = require('./planet-notes-transfer');
 
 // Every disk request from the page passes through here: a write the system
 // refuses (see reportBlockedWrite) is explained to the writer, then the error
@@ -305,6 +306,7 @@ const POCKET_STORE_URL = 'https://apps.apple.com/app/id6816721843';
 async function useCloudLibrary(win) {
   const cloud = pocketCloudLibrary();
   if (!cloud || path.resolve(cloud) === path.resolve(LIBRARY_DIR)) return false;
+  if (typeof notesRuntime !== 'undefined') await notesRuntime.flushAll();
   if (hasBooks(LIBRARY_DIR) && !(await moveLibraryAndClose(win, LIBRARY_DIR, cloud))) {
     app.relaunch(); // the window closed for the move: open again where the books still are
     app.exit(0);
@@ -450,6 +452,7 @@ async function chooseLibraryFolder() {
     if (r.response === 2) return;
     move = r.response === 0;
   }
+  if (typeof notesRuntime !== 'undefined') await notesRuntime.flushAll();
   if (move && !(await moveLibraryAndClose(win, LIBRARY_DIR, next))) {
     app.relaunch(); // the window closed for the move: open again where the books still are
     app.exit(0);
@@ -726,8 +729,8 @@ function renameIntoPlace(from, to) {
   }
 }
 
-function writeFileDurable(file, data) {
-  const tmp = file + '.tmp';
+function writeFileDurable(file, data, temporaryPath = file + '.tmp') {
+  const tmp = temporaryPath;
   const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
   const fd = fs.openSync(tmp, 'w');
   try {
@@ -980,46 +983,110 @@ ipcMain.handle('book:create', (_e, meta) => {
 // its folder (chapters, notes, darlings, covers) written whole into a new
 // folder, then its book.json under the new id and title. A half-made copy
 // is removed; the original is only ever read.
-ipcMain.handle('book:duplicate', (_e, bookId, title) => {
-  ensureLibrary();
-  const src = bookDir(bookId);
-  const meta = readJSON(path.join(src, 'book.json'), null);
-  if (!meta) throw new Error('That book could not be read');
-  const slug = String(title || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
-  const id = 'book-' + (slug ? slug + '-' : '') +
-    Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
-  const dest = bookDir(id);
-  // a chapter iCloud hasn't brought down yet would be missing from the copy
-  const waiting = (dir) => fs.readdirSync(dir, { withFileTypes: true }).some((e) => (e.isDirectory() ? waiting(path.join(dir, e.name)) : /\.icloud$/.test(e.name)));
-  const files = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(path.join(dir, e.name)) : [path.join(dir, e.name)]));
-  const away = cloudOnlyAmong(files(src));
-  if (away.size) requestDownload(away);
-  if (away.size || waiting(src)) throw new Error('Some of this book is still downloading from iCloud. Try again in a moment');
-  const copyDir = (from, to) => {
-    fs.mkdirSync(to, { recursive: true });
-    for (const ent of fs.readdirSync(from, { withFileTypes: true })) {
-      // (a write caught halfway, a spare copy, a placeholder: not the book)
-      if (/\.(tmp|bak|icloud)$/.test(ent.name) || ent.name === 'book.json') continue;
-      const a = path.join(from, ent.name);
-      const b = path.join(to, ent.name);
-      if (ent.isDirectory()) copyDir(a, b);
-      else if (ent.isFile()) writeFileDurable(b, fs.readFileSync(a));
+// A cloud provider can stall after the availability check. Never wait for a
+// library read on the main thread, or hold editors frozen indefinitely.
+function readBookCopyFile(file, timeoutMs = 20000) {
+  let timer;
+  return Promise.race([
+    fs.promises.readFile(file),
+    new Promise((_resolve, reject) => {
+      timer = setTimeout(() => reject(Object.assign(new Error(t('Could not read {path} while copying the book.', { path: file })), { code: 'ETIMEDOUT' })), timeoutMs);
+    })
+  ]).finally(() => clearTimeout(timer));
+}
+
+let bookCopyQueue = Promise.resolve();
+ipcMain.handle('book:duplicate', async (_e, bookId, title) => {
+  const duplicate = async () => {
+    ensureLibrary();
+    const src = bookDir(bookId);
+    if (fs.lstatSync(src).isSymbolicLink()) throw Object.assign(new Error(t('Linked book folders cannot be copied')), { code: 'EINVAL' });
+    const manifest = [];
+    const inventory = (dir, relative = '', include = true, output = manifest) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const sub = relative ? relative + '/' + entry.name : entry.name;
+        const type = entry.isSymbolicLink() ? 'symlink' : entry.isDirectory() ? 'directory' : entry.isFile() ? 'file' : 'other';
+        const policy = bookCopyPolicy(sub, type);
+        if (policy === 'unavailable') throw new Error(t('Some of this book is still downloading from iCloud. Try again in a moment'));
+        const included = include && policy === 'include';
+        output.push({ path: sub, type, included });
+        if (type === 'directory') inventory(path.join(dir, entry.name), sub, included, output);
+      }
+      return output;
+    };
+    inventory(src);
+    const allFiles = manifest.filter(entry => entry.type === 'file').map(entry => path.join(src, entry.path));
+    const away = cloudOnlyAmong(allFiles);
+    if (away.size) { requestDownload(away); throw new Error(t('Some of this book is still downloading from iCloud. Try again in a moment')); }
+    const readSource = async (relative) => {
+      const parts = relative.split('/');
+      for (let length = 1; length < parts.length; length++) {
+        const parent = fs.lstatSync(path.join(src, ...parts.slice(0, length)));
+        if (!parent.isDirectory() || parent.isSymbolicLink()) throw Object.assign(new Error(t('Book directory type changed')), { code: 'EINVAL' });
+      }
+      const file = path.join(src, relative);
+      const stat = fs.lstatSync(file);
+      if (!stat.isFile() || stat.isSymbolicLink()) throw Object.assign(new Error(t('Book file type changed')), { code: 'EINVAL' });
+      const pending = cloudOnlyAmong([file]);
+      if (pending.size) { requestDownload(pending); throw Object.assign(new Error(t('Book file unavailable')), { code: 'ECLOUD' }); }
+      if (fs.existsSync(path.join(path.dirname(file), '.' + path.basename(file) + '.icloud'))) throw Object.assign(new Error(t('Book file unavailable')), { code: 'ECLOUD' });
+      return readBookCopyFile(file);
+    };
+    const fingerprint = bytes => require('node:crypto').createHash('sha256').update(bytes).digest('hex');
+    const originalMetadata = await readSource('book.json');
+    const meta = JSON.parse(originalMetadata.toString('utf8'));
+    if (!meta || typeof meta !== 'object' || Array.isArray(meta) || !Array.isArray(meta.chapterOrder)) throw new Error('That book could not be read');
+    const slug = String(title || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+    const id = 'book-' + (slug ? slug + '-' : '') + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
+    const dest = bookDir(id); let created = false;
+    const observed = new Map([['book.json', fingerprint(originalMetadata)]]);
+    try {
+      fs.mkdirSync(dest); created = true; // Never merge into or remove an existing book.
+      let staging;
+      do {
+        staging = fs.mkdtempSync(path.join(dest, '.neo-copy-'));
+        if (!manifest.some(entry => entry.path.split('/')[0] === path.basename(staging))) break;
+        fs.rmdirSync(staging);
+      } while (true);
+      for (const entry of manifest) {
+        if (!entry.included) continue;
+        const target = path.join(dest, entry.path);
+        if (entry.type === 'directory') { fs.mkdirSync(target, { recursive: true }); continue; }
+        const bytes = await readSource(entry.path);
+        // A copied .tmp file/directory is author evidence, not our scratch name.
+        writeFileDurable(target, bytes, path.join(staging, 'bytes.tmp'));
+        if (!(await readBookCopyFile(target)).equals(bytes)) throw Object.assign(new Error(t('Copied book file could not be verified')), { code: 'EIO' });
+        observed.set(entry.path, fingerprint(bytes));
+      }
+      fs.rmdirSync(staging);
+      const now = new Date().toISOString();
+      const copy = { ...meta, id, title: title || meta.title, created: now, modified: now };
+      delete copy.uuid;
+      const latest = inventory(src, '', true, []);
+      if (JSON.stringify(latest) !== JSON.stringify(manifest)) throw Object.assign(new Error(t('The source book changed during copying')), { code: 'ECONFLICT' });
+      for (const [relative, digest] of observed) if (fingerprint(await readSource(relative)) !== digest) throw Object.assign(new Error(t('The source book changed during copying')), { code: 'ECONFLICT' });
+      writeJSON(path.join(dest, 'book.json'), copy);
+      if (JSON.stringify(JSON.parse((await readBookCopyFile(path.join(dest, 'book.json'))).toString('utf8'))) !== JSON.stringify(copy)) throw new Error(t('Copied book metadata could not be verified'));
+      writeCatalog();
+      return copy;
+    } catch (err) {
+      logError('duplicate', err);
+      if (created) {
+        try { fs.rmSync(dest, { recursive: true, force: true }); }
+        catch (cleanupError) { logError('duplicate cleanup', cleanupError); err.message += '\n' + t('An incomplete copy remains at {path}.', { path: dest }); }
+      }
+      throw err;
     }
   };
-  try {
-    copyDir(src, dest);
-    const now = new Date().toISOString();
-    const copy = { ...meta, id, title: title || meta.title, created: now, modified: now };
-    delete copy.uuid; // an ebook store sees a new book
-    writeJSON(path.join(dest, 'book.json'), copy);
-    writeCatalog();
-    return copy;
-  } catch (err) {
-    logError('duplicate', err);
-    try { fs.rmSync(dest, { recursive: true, force: true }); } catch { /* left for the writer */ }
-    throw err;
-  }
+  // Serialize copies so one request cannot resume editors that another is still
+  // reading. Keep them frozen until asynchronous verification/rollback finishes.
+  const copying = bookCopyQueue.then(async () => {
+    const resume = notesDevelopmentEnabled ? await notesRuntime.flushAll() : () => {};
+    try { return await duplicate(); } finally { resume(); }
+  });
+  bookCopyQueue = copying.catch(() => {});
+  return copying;
 });
 
 // every book folder in the library, shelved or not — for File → Reshelve
@@ -1227,6 +1294,7 @@ ipcMain.handle('book:delete', async (_e, bookId, title) => {
   });
   if (response === 1) {
     const { shell } = require('electron');
+    const resumeNotes = typeof notesRuntime !== 'undefined' ? await notesRuntime.flushAll() : () => {};
     try {
       await shell.trashItem(bookDir(bookId));
       return true;
@@ -1240,7 +1308,7 @@ ipcMain.handle('book:delete', async (_e, bookId, title) => {
         detail: t('The book is untouched. Its folder is highlighted so you can deal with it yourself.')
       });
       return false;
-    }
+    } finally { resumeNotes(); }
   }
   return false;
 });
@@ -2431,6 +2499,29 @@ function libraryPageTheme() {
 }
 
 // ---------------------------------------------------------------------------
+// Custom Notes remains gated to isolated, unpackaged integration-test profiles.
+// This gate is separate from Show More Features and is never a release toggle.
+const notesTestRoot = process.env && process.env.NEO_PLANET_NOTES_TEST_ROOT;
+let notesDevelopmentEnabled = false;
+if (!app.isPackaged && process.env && process.env.NEO_PLANET_NOTES_TEST === '1' && notesTestRoot) {
+  try {
+    const home = fs.realpathSync(notesTestRoot);
+    const temp = fs.realpathSync(os.tmpdir());
+    notesDevelopmentEnabled = home.startsWith(temp + path.sep) && fs.realpathSync(app.getPath('documents')) === home && path.resolve(app.getPath('userData')).startsWith(home + path.sep);
+  } catch { /* a missing isolated profile never enables the feature */ }
+}
+const notesRuntime = require('./planet-notes-runtime').createNotesRuntime({
+  app, ipcMain, enabled: notesDevelopmentEnabled, libraryRoot: () => LIBRARY_DIR, libName, logError,
+  availability: async (file) => {
+    if (isCloudOnly(file)) { requestDownload([file]); return 'unavailable'; }
+    try {
+      await fs.promises.lstat(path.join(path.dirname(file), '.' + path.basename(file) + '.icloud'));
+      requestDownload([file]); return 'unavailable';
+    } catch (err) { if (err.code !== 'ENOENT') throw err; }
+    return 'local';
+  }
+});
+
 function createWindow() {
   // the window comes back the size and place it was left, when that place
   // is still on a screen (a monitor unplugged since gets the default)
@@ -2470,6 +2561,7 @@ function createWindow() {
       spellcheck: true
     }
   });
+  notesRuntime.attach(win);
   if (process.platform === 'win32') {
     win.on('query-session-end', holdUpdateForShutdown);
     win.on('session-end', holdUpdateForShutdown);
@@ -3540,9 +3632,10 @@ ipcMain.handle('update:check', async () => {
   }
 });
 
-ipcMain.handle('update:install', () => {
+ipcMain.handle('update:install', async () => {
   const u = getUpdater();
   if (!u || !updaterReady) return false;
+  await notesRuntime.flushAll();
   setImmediate(() => u.quitAndInstall(false, true));
   return true;
 });
