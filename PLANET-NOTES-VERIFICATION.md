@@ -1,10 +1,11 @@
 # Planet Notes — Stage 7 verification
 
-Status: the full domain/failure campaign and all seven renderer profiles have
-run. Desktop, Pocket bridge and existing Notes regressions pass after the fixture
-corrections described below. **Release is not approved**: large-collection
-performance needs review, native verification and manual accessibility remain
-outstanding. No collection/nesting cap or normal-launch feature gate was changed.
+Status: Stages 1–7 implementation and automated verification are closed as a
+delivery milestone. Remaining performance acceptance, native-device verification,
+and manual interaction/accessibility checks are deferred to
+[NG+](PLANET-NOTES-NG-PLUS.md). **Release is not approved**: the existing partial,
+not-run and open release requirements remain in force under that follow-up task.
+No collection/nesting cap or normal-launch feature gate was changed.
 
 ## Measured fixes and remaining findings
 
@@ -166,7 +167,7 @@ a tiny domain measurement and two external-edit rounds, not the full campaign.
 JSON/Markdown outputs refuse to overwrite existing evidence. Local stress-results/
 artifacts are ignored by git; retain a reviewed summary/evidence references for
 release decisions. Any proposed product limit or other product tradeoff returns to the author for
-an explicit decision. Stage 7 remains open until all release gates are satisfied.
+an explicit decision. Release verification continues in NG+ until all release gates are satisfied.
 
 Run component or full-app measurements in isolated Electron fixtures:
 
@@ -314,3 +315,21 @@ At 1,000 notes, the profiled read-only/preflight path completed cold hydration i
 results appeared in 435 ms. The full 635-test Node suite and latest full domain,
 fault and conflict campaign pass. Native device and manual screen-reader checks
 remain unavailable/outstanding, so ordinary-user enablement stays off.
+
+## Review follow-up — 2026-11-13
+
+The review fixes add regressions for clean normalized HTML versus external edits
+and deletion, availability restoration, collection-level orphan discovery,
+tombstones, partial cloud discovery, and manuscript paste/save/reopen. The full
+Node suite passes 646 tests. The isolated Electron editor, explorer and Pocket
+suites exercise the shared changes; these do not certify native mobile storage.
+
+The stress campaign now includes `history-scaling`: actual retained command
+journals, repeated collection reads, measured saves, and reopening the service.
+Smoke runs cover 0/5/15 prior saves; full runs cover 0/30/300. There are no timing
+acceptance thresholds or new retention limits. Local evidence:
+`stress-results/history-review-followup-2026-11-13.json`. For eight notes, warm
+collection reads took 160/640/4960 adapter reads after 0/30/300 prior saves.
+These in-memory measurements confirm retained-history read amplification; they
+are not native I/O timings or performance acceptance. Optimization remains open
+alongside NG+ performance review. Ordinary-user feature gates remain unchanged.

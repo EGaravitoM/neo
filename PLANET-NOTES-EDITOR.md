@@ -209,3 +209,20 @@ active-content rejection, plain-text previews, copy/source separation, external
 adoption and caret offsets, alongside the Task 3.1 close and legacy routing checks.
 Stage 4 navigation controls, Stage 5 recovery views and Stage 6 Pocket remain
 separate gates; ordinary launches still cannot activate Custom Notes.
+
+### Review follow-up: normalization, availability, discovery and paste
+
+Clean editor refreshes use the exact observed body token as the local version;
+DOM normalization alone is not a competing edit. The displayed HTML separately
+tracks typing during refresh. A restored unchanged body is reinspected and shown
+again after temporary unavailability; unsupported HTML remains read-only.
+
+Collection loads now run the same queued orphan discovery as note refreshes,
+including when no custom note is open. Missing or invalid metadata is not replaced
+with a guessed index. Incomplete cloud inventories retain indexed content and
+mark search coverage incomplete while discovery waits for a later refresh.
+
+Custom-note paste converts manuscript footnote markers to inert inline prose,
+preserving their attribute-held words, and flattens placeholder markers. The same
+conversion preserves footnote words in previews and editable copies of previously
+saved unsupported documents. Existing legacy Notes paste behavior is unchanged.

@@ -120,11 +120,11 @@ async function run() {
   // exercising the real explorer DOM, event handlers and search implementation.
   await js(`(async () => {
     const fixtureBook='book-regressions'; const chapter={bookId:fixtureBook,kind:'chapter',chapterId:'ch-first'};
-    let live=[]; let metadataStatus='ok'; let throwCloud=false; let closePreviewTask=Promise.resolve();let noteReadTask=null;
+    let live=[]; let metadataStatus='ok'; let orphanDiscovery; let throwCloud=false; let closePreviewTask=Promise.resolve();let noteReadTask=null;
     const metadata={schemaVersion:1,versionId:'v-fixture',parentVersionIds:[],root:{sortMode:'alphabetical',childOrder:['n-fixture']},groups:[],notes:[{id:'n-fixture',title:'Mara',parentId:null,labelIds:['l-old'],createdAt:'2026-11-11T10:00:00.000Z'}],labels:[{id:'l-old',name:'plot'}],tombstones:[]};
     const errors=[];const api={
       notesCapabilities:async()=>({enabled:true}),
-      notesLoad:async()=>{if(throwCloud)throw Object.assign(new Error('Cloud unavailable'),{code:'ECLOUD'});return metadataStatus==='ok'?{status:'ok',index:structuredClone(metadata)}:{status:metadataStatus};},
+      notesLoad:async()=>{if(throwCloud)throw Object.assign(new Error('Cloud unavailable'),{code:'ECLOUD'});return metadataStatus==='ok'?{status:'ok',index:structuredClone(metadata),orphanDiscovery}:{status:metadataStatus};},
       notesRead:async()=>noteReadTask||({status:'ok',html:'<p>Orchard</p>'}),
       notesReadLegacy:async(_book,{page})=>page==='book'?{status:'ok',html:'<p>Local legacy reference</p>'}:{status:'missing'}
     };
@@ -166,6 +166,10 @@ async function run() {
     await action('search');explorer.root.querySelector('[data-label-id="l-old"]').click();
     await action('close');metadata.labels=[{id:'l-new',name:'Plot'}];metadata.notes[0].labelIds=['l-new'];
     await action('search');check(count()===1,'Merged label must not retain obsolete ID');
+    await action('close');orphanDiscovery='unavailable';await action('search');query('orchard');
+    check(count()===1,'Incomplete orphan inventory must not hide indexed notes');
+    check(explorer.root.querySelector('.notes-explorer-status').textContent.includes('incomplete'),'Incomplete orphan discovery must be disclosed');
+    orphanDiscovery=undefined;
     for(const state of ['unavailable','invalid','throw']){
       await action('close');metadataStatus=state;throwCloud=state==='throw';
       await action('search');query('local legacy');check(count()===1,'Local legacy search blocked by '+state+' metadata');

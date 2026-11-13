@@ -82,18 +82,32 @@ function createNotesObserver({ adapter, store, makeId, now }) {
     if (result.status !== 'saved') throw fail('EPENDING', 'Metadata changed during reconciliation');
     return remember();
   };
-  const refresh = async (noteId, { baseBodyToken, localHtml }) => {
-    let loaded = required(await metadata());
+  const discoverOrphans = async () => {
+    let loaded = await metadata();
+    // Missing/invalid metadata cannot prove which files were intentionally
+    // trashed. Preserve that evidence rather than inventing a new index.
+    if (loaded.status !== 'ok') return loaded;
     // Most polls have no new root HTML. Do not run a collection-wide recovery
     // transaction (and read every indexed body) just to refresh one open note.
     // If any candidate exists, the existing full recovery/validation still runs.
     const indexed = new Set(loaded.index.notes.map(note => note.id + '.html'));
-    const candidates = (await adapter.list('', false)).some(name => name !== '.html' && name.endsWith('.html') && !/[/\\\0]/.test(name) && !indexed.has(name));
+    let names;
+    try { names = await adapter.list('', false); }
+    catch (err) {
+      if (err.code !== 'ECLOUD') throw err;
+      // An incomplete orphan inventory must not hide already indexed writing.
+      return { ...loaded, orphanDiscovery: 'unavailable' };
+    }
+    const candidates = names.some(name => name !== '.html' && name.endsWith('.html') && !/[/\\\0]/.test(name) && !indexed.has(name));
     if (candidates) {
       const orphans = await store.recoverOrphans({ operationId: makeId('o'), versionId: makeId('v'), createdAt: now(), expectedIndexToken: loaded.indexToken });
       if (!['saved', 'unchanged'].includes(orphans.status)) return orphans;
       if (orphans.status === 'saved') { await remember(); loaded = required(await store.load()); }
     }
+    return loaded;
+  };
+  const refresh = async (noteId, { baseBodyToken, localHtml }) => {
+    const loaded = required(await discoverOrphans());
     const note = loaded.index.notes.find((n) => n.id === noteId);
     if (!note) {
       const deletion = [...loaded.index.tombstones].reverse().find((t) => t.id === noteId);
@@ -122,7 +136,7 @@ function createNotesObserver({ adapter, store, makeId, now }) {
     await remember();
     return { status: 'ok', html: localHtml, bodyToken: localHtml, title: note.title, changed: true, conflictNoteId: result.conflictNoteId };
   };
-  return { observe, remember, metadata, refresh };
+  return { observe, remember, metadata, discoverOrphans, refresh };
 }
 const api = { createNotesObserver };
 if (node) module.exports = api;

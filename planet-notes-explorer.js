@@ -135,8 +135,8 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
     try { loaded = await call('notesLoad', book); }
     catch (err) { if (onError) onError(err); loaded = { status: 'unavailable' }; }
     if (!sameOwner(book, turn) || mode !== 'search') return;
-    metadataUnavailable = !['ok', 'missing'].includes(loaded.status);
-    if (!metadataUnavailable) {
+    metadataUnavailable = !['ok', 'missing'].includes(loaded.status) || loaded.orphanDiscovery === 'unavailable';
+    if (['ok', 'missing'].includes(loaded.status)) {
       index = loaded.status === 'ok' ? loaded.index : null;
       const availableLabels = new Set((index?.labels || []).map((label) => label.id));
       selectedLabels = new Set([...selectedLabels].filter((id) => availableLabels.has(id)));

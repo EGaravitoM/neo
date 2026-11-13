@@ -12,6 +12,22 @@ const styles = {
   'text-decoration': /^(none|underline|line-through|underline line-through)$/,
   'text-decoration-line': /^(none|underline|line-through|underline line-through)$/
 };
+// Manuscript-only markers may arrive through the shared paste cleaner. Keep
+// their words as inert prose; Custom Notes does not own manuscript footnotes.
+function flattenManuscriptMarkers(root) {
+  for (const footnote of root.querySelectorAll('span.fn[data-note]')) {
+    footnote.replaceWith(document.createTextNode(' (' + footnote.getAttribute('data-note') + ')'));
+  }
+  for (const marker of root.querySelectorAll('span.ph-mark')) {
+    marker.replaceWith(document.createTextNode(marker.textContent || ''));
+  }
+}
+function fromPaste(html) {
+  const template = document.createElement('template'); template.innerHTML = html;
+  flattenManuscriptMarkers(template.content);
+  const checked = inspect(template.innerHTML);
+  return checked.status === 'editable' ? checked.html : checked.copyHtml;
+}
 function inspect(html) {
   if (typeof html !== 'string') throw new TypeError('Expected note HTML');
   const template = document.createElement('template'); template.innerHTML = html;
@@ -37,6 +53,7 @@ function inspect(html) {
   if (supported) return { status: 'editable', html: template.innerHTML };
   // A plain-text preview cannot execute scripts, navigate links, load resources,
   // or activate custom elements. Script/style source is excluded from prose.
+  flattenManuscriptMarkers(template.content);
   template.content.querySelectorAll('script,style,template,noscript').forEach((n) => n.remove());
   template.content.querySelectorAll('p,div,br,li,h1,h2,h3,h4,h5,h6,blockquote,pre,tr').forEach((n) => n.after(document.createTextNode('\n')));
   const text = template.content.textContent || '';
@@ -47,7 +64,7 @@ function inspect(html) {
   }
   return { status: 'unsupported', previewText: text, copyHtml: simplified.innerHTML || '<p><br></p>' };
 }
-const api = { inspect };
+const api = { inspect, fromPaste };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else globalThis.NeoPlanetNotesHtml = api;
 })();

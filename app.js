@@ -12199,8 +12199,12 @@ $('#aux-editor').addEventListener('paste', (e) => {
   e.preventDefault();
   const html = e.clipboardData.getData('text/html');
   const text = e.clipboardData.getData('text/plain');
-  if (html) document.execCommand('insertHTML', false, cleanPasteHtml(html));
-  else if (text) document.execCommand('insertText', false, text.replace(/\r/g, ''));
+  if (html) {
+    const cleaned = cleanPasteHtml(html);
+    const pasted = $('#aux-editor').dataset.customNoteId
+      ? window.NeoPlanetNotesHtml.fromPaste(cleaned) : cleaned;
+    document.execCommand('insertHTML', false, pasted);
+  } else if (text) document.execCommand('insertText', false, text.replace(/\r/g, ''));
 });
 function scheduleAuxSave() {
   clearTimeout(saveTimers.aux);

@@ -42,7 +42,7 @@ function markdownReport(report) {
   return ['# Planet Notes release verification', '', 'Release ready: ' + (assessment.releaseReady ? 'yes' : 'no'), 'Profile: ' + report.profile + '; seed: ' + report.seed, '',
     'Fixture sizes are measurement inputs, not product limits.', '', '| Gate | Status | Evidence |', '| --- | --- | --- |',
     ...report.gates.map(g => '| ' + g.id + ' | ' + g.status + ' | ' + g.evidence.join('; ').replace(/\|/g, '\\|') + ' |'), '',
-    '## Measurements', '', ...report.results.map(r => '- ' + r.id + ': ' + r.status + (r.error ? ' (' + r.error + ')' : r.samples ? '; query p50=' + r.queryP50Ms.toFixed(3) + 'ms, p95=' + r.queryP95Ms.toFixed(3) + 'ms; tree max=' + Math.max(...r.samples.map(s => s.treeMs)).toFixed(3) + 'ms; search-build max=' + Math.max(...r.samples.map(s => s.searchBuildMs)).toFixed(3) + 'ms' : '')), '',
+    '## Measurements', '', ...report.results.map(r => '- ' + r.id + ': ' + r.status + (r.error ? ' (' + r.error + ')' : r.id === 'history-scaling' && r.samples ? '; ' + r.samples.map(s => s.priorSaves + ' prior saves: ' + s.scanReads + ' reads / ' + s.notes + ' notes, scan=' + s.scanMs.toFixed(3) + 'ms, save=' + s.saveMs.toFixed(3) + 'ms').join('; ') + '; performance acceptance pending' : r.samples ? '; query p50=' + r.queryP50Ms.toFixed(3) + 'ms, p95=' + r.queryP95Ms.toFixed(3) + 'ms; tree max=' + Math.max(...r.samples.map(s => s.treeMs)).toFixed(3) + 'ms; search-build max=' + Math.max(...r.samples.map(s => s.searchBuildMs)).toFixed(3) + 'ms' : '')), '',
     'Native and UI gates are not inferred from Node, mocked I/O, or synthetic evidence.', 'This report does not enable the feature.'].join('\n') + '\n';
 }
 module.exports = { requiredGates, uiScenarios, createReleaseReport, assessRelease, markdownReport };

@@ -95,4 +95,38 @@ async function runSyncRaces(rounds = 12) {
   }
   return { id: 'sync-races', scope: 'Simulated external file edits; not cloud-provider certification', status: 'passed', rounds };
 }
-module.exports = { runDomainCase, faultAdapter, runStorageFaults, runSyncRaces };
+/** Measures accumulated journals as well as collection size. Passing proves
+ * preservation, not acceptable latency; timings remain evidence for NG+. */
+async function runHistoryScaling({ checkpoints = [0, 30, 300], noteCount = 8 } = {}) {
+  const d = faultAdapter(); const { service } = openService(d); const notes = [];
+  for (let i = 0; i < noteCount; i++) notes.push((await service.create('book-stress', { operationId: 'o-history-create-' + i, title: 'History ' + i })).noteId);
+  let html = '<p><br></p>'; let saves = 0; const samples = [];
+  for (const target of checkpoints) {
+    while (saves < target) {
+      const next = '<p>Author revision ' + (++saves) + '</p>';
+      await service.save('book-stress', notes[0], { operationId: 'o-history-save-' + saves, html: next, expectedBodyToken: html, writingDay: '2026-11-12' });
+      html = next; d.events.length = 0;
+    }
+    // Warm observation artifacts before measuring repeated read cost.
+    for (const id of notes) await service.read('book-stress', id);
+    d.events.length = 0;
+    const scan = await measure(async () => {
+      for (const id of notes) {
+        const body = await service.read('book-stress', id);
+        assert.equal(body.html, id === notes[0] ? html : '<p><br></p>');
+      }
+    });
+    const scanReads = d.events.filter(e => e.operation === 'read').length;
+    assert.equal(d.events.filter(e => e.operation === 'write').length, 0);
+    d.events.length = 0;
+    const next = '<p>Measured author revision ' + (++saves) + '</p>';
+    const save = await measure(() => service.save('book-stress', notes[0], { operationId: 'o-history-save-' + saves, html: next, expectedBodyToken: html, writingDay: '2026-11-12' }));
+    assert.equal(save.value.status, 'saved'); html = next;
+    samples.push({ priorSaves: saves - 1, notes: noteCount, scanReads, scanMs: scan.durationMs, saveMs: save.durationMs, saveReads: d.events.filter(e => e.operation === 'read').length, scheduledTimerDelayMs: Math.max(scan.scheduledTimerDelayMs, save.scheduledTimerDelayMs) });
+    d.events.length = 0;
+  }
+  // All measured words must remain intact after recreating the service.
+  assert.equal((await openService(d).service.read('book-stress', notes[0])).html, html);
+  return { id: 'history-scaling', status: 'passed', scope: 'In-memory adapter; not native I/O latency or performance acceptance', performanceAccepted: false, samples };
+}
+module.exports = { runDomainCase, faultAdapter, runStorageFaults, runSyncRaces, runHistoryScaling };

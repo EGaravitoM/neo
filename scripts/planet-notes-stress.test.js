@@ -115,3 +115,18 @@ test('renderer input probe cancels pending delivery if the measured operation fa
   }), /fixture failed/);
   assert.equal(cancelled, true);
 });
+
+test('history-populated scaling measures read amplification and saves without granting performance acceptance', async () => {
+  const { runHistoryScaling } = require('./helpers/planet-notes-stress-scenarios');
+  const result = await runHistoryScaling({ checkpoints: [0, 4], noteCount: 2 });
+  assert.equal(result.status, 'passed'); assert.equal(result.performanceAccepted, false);
+  assert.deepEqual(result.samples.map(s => s.priorSaves), [0, 4]);
+  const report = createReleaseReport({ seed: 1, profile: 'smoke' }); report.results.push(result);
+  assert.match(markdownReport(report), /4 prior saves:/);
+  assert.match(markdownReport(report), /performance acceptance pending/);
+  assert.equal(assessRelease(report).releaseReady, false);
+  for (const sample of result.samples) {
+    assert.ok(sample.scanReads > 0); assert.ok(sample.saveReads > 0);
+    for (const field of ['scanMs', 'saveMs', 'scheduledTimerDelayMs']) assert.ok(Number.isFinite(sample[field]) && sample[field] >= 0);
+  }
+});

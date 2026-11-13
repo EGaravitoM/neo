@@ -200,7 +200,10 @@ function createNotesController({ api, view, inspect, writingDay, makeOperationId
       if (!api.notesRefresh || composing || flushing || !(active || preview?.entry) || (active || preview?.entry).job) return Promise.resolve();
       const entry = active || preview.entry; const turn = generation;
       const current = () => active === entry || preview?.entry === entry;
-      capture(); const localHtml = entry.html;
+      capture(); const displayedHtml = entry.html;
+      // DOM normalization is not author writing. Compare clean refreshes against
+      // the exact observed bytes, while tracking subsequent typing separately.
+      const localHtml = entry.dirty ? displayedHtml : entry.bodyToken;
       const pending = (async () => {
         const result = await call('notesRefresh', entry.document.bookId, entry.document.noteId, { baseBodyToken: entry.bodyToken, localHtml });
         if (turn !== generation || !current() || disposed) return;
@@ -220,13 +223,13 @@ function createNotesController({ api, view, inspect, writingDay, makeOperationId
           }
           return;
         }
-        if (!result.changed) { entry.title = result.title || ''; return; }
+        if (!result.changed && editable) { entry.title = result.title || ''; return; }
         const checked = inspect ? await inspect(result.html) : { status: 'unvalidated' };
         if (turn !== generation || !current() || disposed) return;
         await waitComposition();
         if (turn !== generation || !current() || disposed) return;
         capture();
-        const newer = entry.html !== localHtml;
+        const newer = entry.html !== displayedHtml;
         if (checked.status !== 'editable') {
           if (entry.dirty || newer) return; // retain writing; next flush preserves the competing source
           editable = false; active = null; preview = { entry: { ...entry, html: result.html, bodyToken: result.bodyToken }, checked };

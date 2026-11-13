@@ -94,11 +94,34 @@ async function run() {
   await js(`window.NeoCustomNotes.rename('Mara revised')`);
   assert.equal(await js(`document.getElementById('aux-title').textContent`), 'Mara revised');
   console.log('PASS: rename reaches the domain service without replacing writing');
+  // Use the actual paste handler, then persist and reopen through the real bridge.
+  const manuscriptPaste = '<p>Pasted prose<span class="fn" data-note="Footnote &amp; author words" contenteditable="false">\u200B</span><span class="ph-mark" data-sid="s-source" contenteditable="false">⚑</span></p>';
+  await js(`(() => {
+    const ed = document.getElementById('aux-editor'); ed.focus();
+    const range = document.createRange(); range.selectNodeContents(ed);
+    const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
+    const data = new DataTransfer(); data.setData('text/html', ${JSON.stringify(manuscriptPaste)});
+    ed.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  })()`);
+  await js('customNotesController.flush()');
+  await js(`openCustomNote(${JSON.stringify(note.noteId)})`);
+  assert.equal(await js(`document.getElementById('aux-editor').contentEditable`), 'true');
+  assert.match(await js(`document.getElementById('aux-editor').textContent`), /Footnote & author words/);
+  assert.equal(await js(`document.getElementById('aux-editor').querySelector('.fn,.ph-mark') !== null`), false);
+  await edit('<p>Continued after paste</p>'); await js('customNotesController.flush()');
+  assert.equal(fs.readFileSync(sourcePath, 'utf8'), '<p>Continued after paste</p>');
+  const oldCopy = await js(`NeoPlanetNotesHtml.inspect(${JSON.stringify(manuscriptPaste)})`);
+  assert.equal(oldCopy.status, 'unsupported');
+  assert.match(oldCopy.previewText, /Footnote & author words/);
+  assert.match(oldCopy.copyHtml, /Footnote &amp; author words/);
+  assert.equal((await js(`NeoPlanetNotesHtml.inspect(${JSON.stringify(oldCopy.copyHtml)})`)).status, 'editable');
+  console.log('PASS: manuscript paste remains editable after save/reopen; legacy simplification preserves footnote words');
+
   await js(`openNotesPage('book')`);
   await until(() => js(`document.getElementById('aux-editor').dataset.kind==='notes' && document.getElementById('aux-editor').contentEditable==='true'`));
   await edit('<p>Legacy notes</p>'); await js('flushAux()');
   await until(() => js(`window.neo.readAux(${JSON.stringify(book.id)},'notes').then(html=>html.includes('Legacy notes'))`));
-  assert.match((await js(`window.neo.notesRead(${JSON.stringify(book.id)},${JSON.stringify(note.noteId)})`)).html, /Custom writing/);
+  assert.match((await js(`window.neo.notesRead(${JSON.stringify(book.id)},${JSON.stringify(note.noteId)})`)).html, /Continued after paste/);
   console.log('PASS: custom and legacy Notes use separate saving paths');
   await js(`openCustomNote(${JSON.stringify(note.noteId)}, html=>({status:'editable',html}))`);
   await js(`window.neo.notesCloseResult({token:'forged',status:'ready'})`);

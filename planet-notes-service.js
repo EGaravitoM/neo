@@ -228,7 +228,7 @@ function createNotesService({ getBook, enabled = false, makeId = (prefix) => pre
   };
   return {
     capabilities: async () => ({ enabled: !!enabled, canManage: !!enabled, canRestore: !!enabled }),
-    load: async (bookId) => { bookIdentity(bookId); return enabled ? serial(bookId, async (ctx) => { await settleAll(ctx); const loaded = await observer(ctx).metadata(); return loaded.status === 'ok' ? { ...loaded, index: clone(loaded.index) } : loaded; }) : { status: 'disabled' }; },
+    load: async (bookId) => { bookIdentity(bookId); return enabled ? serial(bookId, async (ctx) => { await settleAll(ctx); const loaded = await observer(ctx).discoverOrphans(); return loaded.status === 'ok' ? { ...loaded, index: clone(loaded.index) } : loaded; }) : { status: 'disabled' }; },
     read: async (bookId, noteId) => {
       active(); bookIdentity(bookId); id(noteId);
       return serial(bookId, async (ctx) => {

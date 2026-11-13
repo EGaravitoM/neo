@@ -46,7 +46,8 @@
       "evidence": [
         "All seven renderer profiles and full app 10,000-note cold load completed",
         "First matching result 322ms; complete cold load179.1s; performance acceptance remains open"
-      ]
+      ],
+      "trackingTask": "NG+"
     },
     {
       "id": "accessibility",
@@ -56,7 +57,8 @@
         "Exact End, keyboard management, drag destination and focus regressions passed",
         "Chromium AX inspection found named searchbox/tree/treeitems: app-smoke-release-inspection.json",
         "Manual screen-reader testing not completed"
-      ]
+      ],
+      "trackingTask": "NG+"
     },
     {
       "id": "fonts-themes",
@@ -99,13 +101,15 @@
       "id": "native-ios",
       "requirement": "Native iCloud, replacement durability, links and suspension",
       "status": "not-run",
-      "evidence": []
+      "evidence": [],
+      "trackingTask": "NG+"
     },
     {
       "id": "native-android",
       "requirement": "Native storage, permissions, links and suspension",
       "status": "not-run",
-      "evidence": []
+      "evidence": [],
+      "trackingTask": "NG+"
     },
     {
       "id": "compatibility",
@@ -123,7 +127,8 @@
         "app-wide-10000-incremental-results.json: first result322ms, full cold hydration179.1s, durable observation writes116.5s",
         "Tree retention substantially improves expansion; remaining delays need explicit acceptance",
         "Longer test budget is not a product limit or automatic latency acceptance"
-      ]
+      ],
+      "trackingTask": "NG+"
     }
   ],
   "results": [
@@ -506,13 +511,15 @@
       "id": "full-app-hydration",
       "status": "open",
       "evidence": "stress-results/app-wide-10000-incremental-results.json",
-      "description": "Full 10,000-note cold load now completes with first result322ms and hydration179.1s. Durable observations account for116.5s. Review acceptable latency before release; no size limit or weaker durability authorized."
+      "description": "Full 10,000-note cold load now completes with first result322ms and hydration179.1s. Durable observations account for116.5s. Review acceptable latency before release; no size limit or weaker durability authorized.",
+      "trackingTask": "NG+"
     },
     {
       "id": "repeated-tree-render",
       "status": "open",
       "evidence": "stress-results/ui-*-available-first.json",
-      "description": "Retained rows remove repeated reconstruction and improve cumulative expansion substantially. Remaining large/deep input delays require performance acceptance; no product cap introduced."
+      "description": "Retained rows remove repeated reconstruction and improve cumulative expansion substantially. Remaining large/deep input delays require performance acceptance; no product cap introduced.",
+      "trackingTask": "NG+"
     },
     {
       "id": "explorer-test-instability",
@@ -2645,5 +2652,16 @@
       "scripts/planet-notes-app-stress.e2e.js": "c14a4dd3a867d6558752b30413acf9d640edbe8cae914edac263a316cc4bd6f6",
       "scripts/planet-notes-ui-stress.e2e.js": "03a1da680aeaac0ce4360c8e022d92ad6c4de7c39c8782fd3641f43ef3444b76"
     }
+  },
+  "deliveryStatus": "Stages 1–7 implementation and automated verification complete; remaining release work deferred to NG+",
+  "followupTask": {
+    "name": "NG+",
+    "status": "deferred",
+    "document": "PLANET-NOTES-NG-PLUS.md",
+    "scope": [
+      "performance acceptance",
+      "native iOS/Android verification",
+      "manual pointer and screen-reader checks"
+    ]
   }
 }

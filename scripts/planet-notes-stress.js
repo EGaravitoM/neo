@@ -30,7 +30,7 @@ function plan(config, host = environment()) {
   const report = createReleaseReport({ seed: config.seed, profile: config.profile, environment: host });
   report.execution = 'not-run'; report.runs = config.runs; report.caseTimeoutMs = config.timeoutMs;
   report.cases = profiles[config.profile].map(definition => ({ ...definition, status: 'not-run' }));
-  report.storageScenarios = ['each-save-write-checkpoint', 'unavailable-index-and-body', 'repeated-external-versions'];
+  report.storageScenarios = ['each-save-write-checkpoint', 'unavailable-index-and-body', 'repeated-external-versions', 'history-scaling'];
   return report;
 }
 function worker(job, timeoutMs) {
@@ -48,7 +48,7 @@ function worker(job, timeoutMs) {
 async function execute(config, runWorker = worker) {
   const report = plan(config); if (!config.run) return report;
   report.execution = 'completed';
-  const jobs = [...profiles[config.profile].map(definition => ({ id: definition.id, type: 'domain', definition, seed: config.seed, runs: config.runs })), { id: 'storage-faults', type: 'storage' }, { id: 'sync-races', type: 'sync' }];
+  const jobs = [...profiles[config.profile].map(definition => ({ id: definition.id, type: 'domain', definition, seed: config.seed, runs: config.runs })), { id: 'storage-faults', type: 'storage' }, { id: 'sync-races', type: 'sync' }, { id: 'history-scaling', type: 'history', checkpoints: config.profile === 'full' ? [0, 30, 300] : [0, 5, 15] }];
   for (const job of jobs) {
     const result = await runWorker(job, config.timeoutMs); report.results.push(result);
     if (result.status !== 'passed') report.findings.push({ id: job.id, status: 'open', evidence: result.error || 'Case did not pass', scope: 'Node/simulated I/O' });
@@ -74,7 +74,7 @@ function writeReport(report, output) {
 async function main(argv) {
   if (argv[0] === '--worker') {
     const job = JSON.parse(argv[1]); const cases = require('./helpers/planet-notes-stress-scenarios'); let result;
-    try { result = job.type === 'domain' ? await cases.runDomainCase(job.definition, job) : job.type === 'storage' ? await cases.runStorageFaults() : job.type === 'sync' ? await cases.runSyncRaces() : (() => { throw new Error('Unknown worker case'); })(); }
+    try { result = job.type === 'domain' ? await cases.runDomainCase(job.definition, job) : job.type === 'storage' ? await cases.runStorageFaults() : job.type === 'sync' ? await cases.runSyncRaces() : job.type === 'history' ? await cases.runHistoryScaling(job) : (() => { throw new Error('Unknown worker case'); })(); }
     catch (err) { result = { id: job.id, status: 'failed', error: err.stack || err.message }; }
     if (!process.send) throw new Error('Stress workers require the parent runner');
     process.send(result, () => process.disconnect()); return;

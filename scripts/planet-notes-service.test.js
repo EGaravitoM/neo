@@ -284,3 +284,68 @@ test('refresh without orphan candidates reads the active body without traversing
   assert.equal(result.status, 'ok'); assert.equal(unrelatedReads, 0);
   assert.equal((await ctx.store.load()).index.notes.length, 2);
 });
+
+test('collection loading discovers orphans without any active note and is idempotent', async () => {
+  const d = fixture();
+  await d.service.organize('book-one', { operationId: 'o-group', action: 'createGroup', title: 'Characters', parentId: null });
+  const ctx = d.books.get('book-one'); ctx.files.set('Lost draft.html', '<p>Recovered writing</p>');
+  const first = await d.service.load('book-one');
+  assert.equal(first.index.notes.length, 1); assert.equal(first.index.notes[0].title, 'Lost draft');
+  assert.equal((await d.service.read('book-one', first.index.notes[0].id)).html, '<p>Recovered writing</p>');
+  const snapshot = new Map(ctx.files);
+  assert.deepEqual((await d.service.load('book-one')).index, first.index);
+  assert.deepEqual(ctx.files, snapshot);
+});
+
+test('collection discovery preserves tombstones and recovers edited deleted writing', async () => {
+  const d = fixture(); const made = await d.service.create('book-one', create());
+  await d.service.organize('book-one', { operationId: 'o-trash', action: 'trashNote', noteId: made.noteId });
+  const ctx = d.books.get('book-one'); ctx.files.set(made.noteId + '.html', '<p>Edited after deletion</p>');
+  const loaded = await d.service.load('book-one');
+  assert.equal(loaded.index.notes.length, 1); assert.notEqual(loaded.index.notes[0].id, made.noteId);
+  assert.ok(loaded.index.tombstones.some(t => t.id === made.noteId));
+  assert.equal((await d.service.read('book-one', loaded.index.notes[0].id)).html, '<p>Edited after deletion</p>');
+  assert.equal((await d.service.load('book-one')).index.notes.length, 1);
+});
+
+test('unavailable orphan bodies are retried on collection load without guessing missing metadata', async () => {
+  const d = fixture(); await d.service.organize('book-one', { operationId: 'o-group', action: 'createGroup', title: 'Characters', parentId: null });
+  const ctx = d.books.get('book-one'); ctx.files.set('Away.html', '<p>Cloud words</p>');
+  const read = ctx.adapter.read; let unavailable = true;
+  ctx.adapter.read = async path => unavailable && path === 'Away.html' ? { status: 'unavailable' } : read(path);
+  assert.equal((await d.service.load('book-one')).index.notes.length, 0);
+  unavailable = false; assert.equal((await d.service.load('book-one')).index.notes.length, 1);
+  ctx.files.delete('index.json'); const evidence = new Map(ctx.files);
+  assert.equal((await d.service.load('book-one')).status, 'missing'); assert.deepEqual(ctx.files, evidence);
+});
+
+for (const deletion of [false, true]) { test('controller normalization does not compete with external ' + (deletion ? 'deletion' : 'writing'), async () => {
+  const { createNotesController } = require('../planet-notes-ui'); const d = fixture();
+  const made = await d.service.create('book-one', create()); const ctx = d.books.get('book-one');
+  ctx.files.set(made.noteId + '.html', '<P>First</P>'); let visible = '';
+  const controller = createNotesController({ api: { notesCapabilities: d.service.capabilities, notesRead: d.service.read, notesRefresh: d.service.refresh },
+    view: { capture: () => visible, present: state => { visible = state.html || ''; } },
+    inspect: html => ({ status: 'editable', html: html.replace(/P/g, 'p') }), writingDay: () => '2026-11-10', makeOperationId: () => 'o-ui' });
+  await controller.open({ bookId: 'book-one', kind: 'custom', noteId: made.noteId });
+  if (deletion) await d.service.organize('book-one', { operationId: 'o-delete', action: 'trashNote', noteId: made.noteId });
+  else ctx.files.set(made.noteId + '.html', '<p>External words</p>');
+  await controller.refresh(); const loaded = await d.service.load('book-one');
+  assert.equal(loaded.index.notes.length, deletion ? 0 : 1);
+  if (!deletion) { assert.equal(visible, '<p>External words</p>'); assert.equal(ctx.files.get(made.noteId + '.html'), visible); }
+  assert.equal(controller.hasPending(), false);
+});
+
+}
+
+test('incomplete cloud orphan inventory does not hide the known collection', async () => {
+  const d = fixture(); const made = await d.service.create('book-one', create());
+  const ctx = d.books.get('book-one'); const list = ctx.adapter.list;
+  ctx.adapter.list = async (prefix, recursive) => {
+    if (prefix === '' && recursive === false) throw Object.assign(new Error('Cloud inventory incomplete'), { code: 'ECLOUD' });
+    return list();
+  };
+  const loaded = await d.service.load('book-one');
+  assert.equal(loaded.status, 'ok'); assert.equal(loaded.orphanDiscovery, 'unavailable');
+  assert.equal(loaded.index.notes[0].id, made.noteId);
+  assert.equal((await d.service.read('book-one', made.noteId)).status, 'ok');
+});

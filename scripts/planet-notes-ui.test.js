@@ -284,3 +284,43 @@ test('a queued rename follows recovered writing with a fresh command identity', 
   assert.equal(renames.length, 1); assert.equal(d.view.state.title, 'New title');
   assert.equal(d.controller.hasPending(), false); assert.equal((await d.controller.requestClose()).status, 'ready');
 });
+
+test('clean normalized markup sends observed bytes while preserving typing during refresh', async () => {
+  const slow = deferred(); let request;
+  const d = fixture({ notesRefresh: async (_book, _note, value) => { request = value; return slow.promise; } }, html => ({ status: 'editable', html: html.replace(/P/g, 'p') }));
+  d.notes.set('book-one/n-first', '<P>First</P>');
+  await d.controller.open(doc());
+  const refreshing = d.controller.refresh();
+  assert.equal(request.localHtml, '<P>First</P>');
+  d.view.html = '<p>New writing</p>'; d.controller.edit(d.view.html);
+  slow.resolve({ status: 'ok', changed: true, html: '<p>External</p>', bodyToken: '<p>External</p>' });
+  await refreshing;
+  assert.equal(d.view.html, '<p>New writing</p>');
+  assert.equal(d.controller.hasPending(), true);
+});
+
+for (const unavailable of ['unavailable', 'missing']) { test('unchanged restored body becomes editable after ' + unavailable, async () => {
+  let available = false;
+  const d = fixture({ notesRefresh: async () => available
+    ? { status: 'ok', changed: false, html: '<p>First</p>', bodyToken: '<p>First</p>' }
+    : { status: unavailable } });
+  await d.controller.open(doc()); await d.controller.refresh();
+  assert.equal(d.view.state.editable, false);
+  available = true; await d.controller.refresh();
+  assert.equal(d.view.state.editable, true); assert.equal(d.view.html, '<p>First</p>');
+  assert.equal(d.controller.hasPending(), false);
+  assert.equal(d.controller.edit('<p>Continued writing</p>'), true);
+});
+
+}
+
+test('unsupported restored content remains safely read-only', async () => {
+  let available = false;
+  const d = fixture({ notesRefresh: async () => available
+    ? { status: 'ok', changed: false, html: '<article>Words</article>', bodyToken: '<article>Words</article>' }
+    : { status: 'unavailable' } }, () => ({ status: 'unsupported', previewText: 'Words', copyHtml: '<p>Words</p>' }));
+  d.notes.set('book-one/n-first', '<article>Words</article>');
+  await d.controller.open(doc()); await d.controller.refresh(); available = true; await d.controller.refresh();
+  assert.equal(d.view.state.status, 'unsupported'); assert.equal(d.view.state.previewText, 'Words');
+  assert.equal(d.controller.edit('Changed'), false);
+});
