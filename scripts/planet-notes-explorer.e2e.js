@@ -95,11 +95,11 @@ async function run() {
   await until(() => js(`document.getElementById('notes-explorer').getAttribute('aria-busy')==='false'`));
   assert.match(fs.readFileSync(bodyPath,'utf8'),/lantern/);
   await click('close');
-  await js(`library.moreFeatures=false;renderNotesNav()`);
+  await js(`setFeature('customNotes',false)`);
   await until(() => js(`!!document.querySelector('[data-explorer-action="search"]')`));
   await click('search'); await js('notesExplorer.settled()'); await query('lantern');
   await until(() => js(`document.querySelectorAll('.notes-search-result').length===1`));
-  console.log('PASS: trash restores writing and recovery/search remain accessible with More Features off');
+  console.log('PASS: trash restores writing and recovery/search remain accessible with Custom Notes organization off');
   await click('close');
   const groupA=await js(`neo.notesOrganize(${JSON.stringify(book.id)},{operationId:'o-group-a',action:'createGroup',title:'People',parentId:null})`);
   const groupB=await js(`neo.notesOrganize(${JSON.stringify(book.id)},{operationId:'o-group-b',action:'createGroup',title:'Places',parentId:null})`);

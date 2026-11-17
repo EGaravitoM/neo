@@ -42,6 +42,8 @@ async function run() {
   await until(() => js('typeof library !== "undefined" && !!library').catch(() => false));
   const capabilities = await js('window.neo.notesCapabilities()');
   assert.equal(capabilities.enabled, !disabled);
+  await js('setupFeatures()');
+  assert.equal(await js("FEATURES.some(f => f.key === 'customNotes')"), !disabled);
   const book = await js('window.neo.createBook({title:"Isolated Custom Notes",author:"Test"})');
   if (disabled) {
     const result = await js(`window.neo.notesCreate(${JSON.stringify(book.id)}, {operationId:'o-blocked',title:'Blocked'})`);

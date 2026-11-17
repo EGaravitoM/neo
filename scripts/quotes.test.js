@@ -7,17 +7,41 @@
 // the paragraph (quoteIsOpen) decide each quote.
 
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const vm = require('node:vm');
 const { describe, test } = require('node:test');
 
-const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+const app = require('./app-files').appSource();
 const between = (from, to) => app.slice(app.indexOf(from), app.indexOf(to));
 const context = vm.createContext({ library: null, book: null, chapterHTML: {}, NeoI18n: { getLocale: () => 'en' } });
 vm.runInContext(between('function quoteOpenIn(', '// A hyphen standing on its own'), context);
-vm.runInContext('this.api = { typedQuote, quoteOpenIn, bookQuotes, singleQuotes };', context);
-const { typedQuote, quoteOpenIn, bookQuotes, singleQuotes } = context.api;
+vm.runInContext('this.api = { typedQuote, quoteOpenIn, bookQuotes, singleQuotes, incomingQuotes, quoteRuns };', context);
+const { typedQuote, quoteOpenIn, bookQuotes, singleQuotes, incomingQuotes, quoteRuns } = context.api;
+
+test('incoming prose curves the quotes and apostrophe reported in #506', () => {
+  const q = { open: '“', close: '”' }, sq = { open: '‘', close: '’' };
+  assert.equal(incomingQuotes("'You aren't,' she replied.", q, sq), '‘You aren’t,’ she replied.');
+  assert.equal(incomingQuotes('“Already curved,” she said.', q, sq), '“Already curved,” she said.');
+  assert.equal(incomingQuotes('"', q, sq, '“I was just—'), '”');
+  assert.equal(incomingQuotes("'t", q, sq, 'can'), '’t');
+});
+
+test('incoming quotes keep context across formatting runs and leave metadata alone', () => {
+  const runs = [{ text: "'You ", b: true }, { text: "aren't", i: true }, { text: ",' she replied." }, { mark: 'note-1' }, { fn: 'fn-1' }];
+  quoteRuns(runs, { open: '“', close: '”' }, { open: '‘', close: '’' });
+  assert.equal(runs.map((r) => r.text || '').join(''), '‘You aren’t,’ she replied.');
+  assert.equal(runs[0].b, true);
+  assert.equal(runs[1].i, true);
+  assert.equal(runs[3].mark, 'note-1');
+  assert.equal(runs[4].fn, 'fn-1');
+});
+
+test('incoming prose uses the writing language, just like typing', () => {
+  for (const lang of ['en', 'fr', 'de', 'de-CH', 'sv', 'pt-PT', 'pl']) {
+    context.library = { spellLanguage: lang };
+    const input = '"Hello," she said. "I was just—"';
+    assert.equal(incomingQuotes(input, bookQuotes(), singleQuotes()), type(lang, input), lang);
+  }
+});
 
 // Type keys into an empty paragraph, writing in lang. chapter: text already in
 // the chapter, which tells bookQuotes the marks the book is set in.
@@ -65,6 +89,7 @@ const styles = [
   ['it', '', `"Disse “ciao”"`, '«Disse “ciao”»'],
   ['pt-PT', '', `"Ele disse “olá”"`, '«Ele disse “olá”»'],
   ['ru', '', `"Он сказал „привет“"`, '«Он сказал „привет“»'],
+  ['uk', '', `"Він сказав „м'ясо“"`, '«Він сказав „м’ясо“»'],
   ['el', '', `"Είπε ‹γεια›"`, '«Είπε ‹γεια›»'],
   // „…” languages, «…» or »…« inside, typed by hand
   ['pl', '', `"Powiedział «cześć»"`, '„Powiedział «cześć»”'],
@@ -72,7 +97,12 @@ const styles = [
   ['hu', '', `"Azt mondta »szia«"`, '„Azt mondta »szia«”'],
   // Swedish ”…”, and a Swedish book in »…»
   ['sv', '', `"Han sa 'hej'"`, '”Han sa ’hej’”'],
-  ['sv', '»Ja» sa hon.', `"Han sa ›hej›"`, '»Han sa ›hej›»']
+  ['sv', '»Ja» sa hon.', `"Han sa ›hej›"`, '»Han sa ›hej›»'],
+  // Danish »…«, ' an apostrophe; a Danish book already in „…“ keeps it
+  ['da', '', `"Hej," sagde hun.`, '»Hej,« sagde hun.'],
+  ['da', '', `"Han sagde 'hej'"`, '»Han sagde ’hej’«'],
+  ['da', '', `"Det er Peters bog," sagde hun. "Ja."`, '»Det er Peters bog,« sagde hun. »Ja.«'],
+  ['da', '„Ja“, sagde hun.', `"Nej," sagde han.`, '„Nej,“ sagde han.']
 ];
 
 describe('smart quotes: an inner quotation closing right before the outer one (#410)', () => {

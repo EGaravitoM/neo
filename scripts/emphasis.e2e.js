@@ -49,7 +49,9 @@ async function type(text) {
     await tick(60);
   }
 }
+const { editKey } = require('./e2e-keys');
 async function chord(keyCode) {
+  if (['x', 'c', 'v', 'a', 'z'].includes(keyCode.toLowerCase())) { await editKey(wc, keyCode); await tick(60); return; }
   wc.sendInputEvent({ type: 'keyDown', keyCode, modifiers: [MOD] });
   wc.sendInputEvent({ type: 'keyUp', keyCode, modifiers: [MOD] });
   await tick(60);
@@ -128,6 +130,37 @@ test('the pause still closes a run of typing for undo', async () => {
   await tick(300);
   assert.equal(await para(6), 'Rain fell on the harbor 6 and first');
 });
+
+// Cutting a whole italic or bold run leaves the text on either side as two nodes.
+for (const [tag, name, n, away] of [['i', 'italics', 8, 'a click in another line'], ['b', 'bold', 9, 'the window losing focus']]) {
+  test(`${name} cut whole, then ${away}, ⌘Z brings the words back`, async () => {
+    const before = await js(`(() => {
+      const body = document.querySelector('.chapter-body');
+      const p = body.children[${n}];
+      p.innerHTML = 'Rain fell <${tag}>on the</${tag}> harbor ${n} and';
+      const r = document.createRange();
+      r.selectNodeContents(p.querySelector('${tag}'));
+      body.focus();
+      getSelection().removeAllRanges();
+      getSelection().addRange(r);
+      return p.innerHTML;
+    })()`);
+    await tick(100);
+    await chord('x');
+    await tick(100);
+    assert.equal(await para(n), `Rain fell  harbor ${n} and`);
+    if (away === 'a click in another line') await caretEnd(11);
+    else {
+      await js(`document.activeElement.blur()`);
+      await tick(300);
+      await js(`document.querySelector('.chapter-body').focus()`);
+    }
+    await tick(300);
+    await chord('z');
+    await tick(300);
+    assert.equal(await para(n), before);
+  });
+}
 
 /* ---------- runner ---------- */
 

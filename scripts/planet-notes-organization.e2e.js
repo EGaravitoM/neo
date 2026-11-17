@@ -124,13 +124,13 @@ async function run() {
   assert.equal(preview, 'inside'); await until(() => index().notes[0].parentId === characters);
   console.log('PASS: case-sensitive labels, assignment and drag destination preview persist');
 
-  await js(`library.moreFeatures=false; renderNotesNav()`);
+  await js(`setFeature('customNotes',false)`);
   await until(() => js(`document.querySelector('.custom-notes-tools').hidden`));
   assert.ok(await js(`!!document.querySelector('[data-item-id="${noteId}"]')`));
   await click(`[data-item-id="${noteId}"]`);
   await until(() => js(`document.getElementById('aux-editor').contentEditable==='true'`));
   assert.equal(await js(`document.getElementById('aux-editor').contentEditable`), 'true');
-  await js(`library.moreFeatures=true;renderNotesNav()`);
+  await js(`setFeature('customNotes',true)`);
   await until(() => js(`!document.querySelector('.custom-notes-tools').hidden`));
   await click(`[data-item-id="${characters}"] [data-action="organize"]`);
   await click('[data-action="delete-group"]'); await until(() => index().groups.length === 1);
@@ -138,7 +138,7 @@ async function run() {
   assert.match(fs.readFileSync(bodyPath, 'utf8'), /Writing to preserve/);
   await click('[data-action="undo"]'); await until(() => index().groups.length === 2);
   assert.equal(index().notes[0].parentId, characters);
-  console.log('PASS: simple-mode accessibility, nonrecursive group deletion and undo');
+  console.log('PASS: Custom Notes option accessibility, nonrecursive group deletion and undo');
   await click(`[data-item-id="${noteId}"] [data-action="organize"]`);
   await click('[data-action="trash-note"]'); await until(() => index().notes.length === 0);
   await click('[data-action="undo"]'); await until(() => index().notes.length === 1);

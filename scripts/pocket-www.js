@@ -4,7 +4,7 @@
 // node scripts/pocket-www.js
 //
 // Fills pocket/www with what NEO Pocket shares with desktop NEO: the editor
-// (app.js, covers.js, styles.css, i18n.js, fonts, locales), JSZip, and the
+// (app/, covers.js, styles.css, i18n.js, fonts, locales), JSZip, and the
 // spellchecker (Hunspell's browser build plus the same dictionaries desktop
 // NEO bundles). The robot build runs this; so does a local Android or iOS
 // build, before `npx cap sync`.
@@ -25,7 +25,10 @@ const copyDir = (from, to) => {
   fs.cpSync(from, to, { recursive: true });
 };
 
-for (const f of ['app.js', 'covers.js', 'styles.css', 'i18n.js', 'planet-notes-html.js', 'planet-notes.js', 'planet-notes-reconcile.js', 'planet-notes-history.js', 'planet-notes-recovery.js', 'planet-notes-store.js', 'planet-notes-organization.js', 'planet-notes-recovery-selection.js', 'planet-notes-observer.js', 'planet-notes-organization-resolution.js', 'planet-notes-organization-service.js', 'planet-notes-library-recovery.js', 'planet-notes-service.js', 'planet-notes-transfer.js', 'planet-notes-pocket.js', 'planet-notes-pocket-bridge.js', 'planet-notes-search.js', 'planet-notes-explorer.js', 'planet-notes-tree.js', 'planet-notes-ui.js']) copy(path.join(root, f), path.join(www, f));
+const { APP_FILES } = require('./app-files');
+fs.rmSync(path.join(www, 'app'), { recursive: true, force: true });
+fs.rmSync(path.join(www, 'app.js'), { force: true }); // from before the window was split
+for (const f of [...APP_FILES, 'covers.js', 'styles.css', 'i18n.js', 'planet-notes-html.js', 'planet-notes.js', 'planet-notes-reconcile.js', 'planet-notes-history.js', 'planet-notes-recovery.js', 'planet-notes-store.js', 'planet-notes-organization.js', 'planet-notes-recovery-selection.js', 'planet-notes-observer.js', 'planet-notes-organization-resolution.js', 'planet-notes-organization-service.js', 'planet-notes-library-recovery.js', 'planet-notes-service.js', 'planet-notes-transfer.js', 'planet-notes-pocket.js', 'planet-notes-pocket-bridge.js', 'planet-notes-search.js', 'planet-notes-explorer.js', 'planet-notes-tree.js', 'planet-notes-ui.js']) copy(path.join(root, f), path.join(www, f));
 copy(path.join(mods, 'jszip', 'dist', 'jszip.min.js'), path.join(www, 'jszip.min.js'));
 copyDir(path.join(root, 'fonts'), path.join(www, 'fonts'));
 copyDir(path.join(root, 'locales'), path.join(www, 'locales'));
@@ -59,8 +62,15 @@ const dictDir = path.join(www, 'dict');
 fs.rmSync(dictDir, { recursive: true, force: true });
 for (const [code, pkg] of Object.entries(langs)) {
   for (const f of ['index.aff', 'index.dic']) copy(path.join(mods, pkg, f), path.join(dictDir, code, f));
-  if (code === 'sv') {
-    for (const f of fs.readdirSync(path.join(root, 'licenses', pkg))) copy(path.join(root, 'licenses', pkg, f), path.join(dictDir, code, f));
+  // the license and notice go along: NEO's own copy in licenses/<pkg>
+  // (Swedish), or the files a dictionary kept in dictionaries/<code> lists
+  // beside its data (Hungarian, Danish)
+  const own = path.join(root, 'licenses', pkg);
+  if (fs.existsSync(own)) for (const f of fs.readdirSync(own)) copy(path.join(own, f), path.join(dictDir, code, f));
+  const kept = path.join(root, 'dictionaries', code);
+  const meta = fs.existsSync(path.join(kept, 'package.json')) ? JSON.parse(fs.readFileSync(path.join(kept, 'package.json'), 'utf8')) : null;
+  if (meta && meta.name === pkg) {
+    for (const f of meta.files || []) if (!/^index\.(aff|dic)$/.test(f)) copy(path.join(kept, f), path.join(dictDir, code, f));
   }
 }
 fs.writeFileSync(path.join(dictDir, 'languages.json'), JSON.stringify(labels) + '\n');
