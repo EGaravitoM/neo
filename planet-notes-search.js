@@ -20,7 +20,7 @@ function createNotesSearch({ textOf = (html) => html, locale } = {}) {
     for (const record of snapshot.values()) {
       // Keep known, unwritten chapter pages available for live-buffer overlays.
       if (record.status === 'absent') continue;
-      if (record.status === 'loading') pending++;
+      if (record.status === 'loading' || record.refreshing) pending++;
       else if (record.status !== 'ok') unavailable++;
       if ((scope === 'group' || scope === 'label' || labelIds.length) && record.document.kind !== 'custom' && record.document.kind !== 'trash') continue;
       if (!labelIds.every((id) => record.labelIds.includes(id))) continue;

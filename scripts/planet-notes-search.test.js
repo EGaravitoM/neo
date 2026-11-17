@@ -49,3 +49,13 @@ test('unwritten chapter pages retain immediate live matches without inventing sa
   assert.equal(found.coverage.complete, true);
   assert.equal(index.query({ text: 'dragon' }).results.length, 0);
 });
+
+test('retained results remain searchable while refresh coverage is pending', () => {
+  const index = createNotesSearch(); const document = doc('custom', 'n-retained');
+  index.upsert({ document, title: 'Retained', html: 'Known writing', status: 'ok', refreshing: true });
+  const pending = index.query({ text: 'Known' });
+  assert.equal(pending.results.length, 1); assert.equal(pending.coverage.pending, 1); assert.equal(pending.coverage.complete, false);
+  index.upsert({ document, title: 'Retained', html: 'Updated writing', status: 'ok' });
+  assert.equal(index.query({ text: 'Known' }).results.length, 0);
+  assert.equal(index.query({ text: 'Updated' }).coverage.complete, true);
+});

@@ -27,8 +27,8 @@ const copyDir = (from, to) => {
 
 const { APP_FILES } = require('./app-files');
 fs.rmSync(path.join(www, 'app'), { recursive: true, force: true });
-fs.rmSync(path.join(www, 'app.js'), { force: true }); // from before the window was split
-for (const f of [...APP_FILES, 'covers.js', 'styles.css', 'i18n.js', 'planet-notes-html.js', 'planet-notes.js', 'planet-notes-reconcile.js', 'planet-notes-history.js', 'planet-notes-recovery.js', 'planet-notes-store.js', 'planet-notes-organization.js', 'planet-notes-recovery-selection.js', 'planet-notes-observer.js', 'planet-notes-organization-resolution.js', 'planet-notes-organization-service.js', 'planet-notes-library-recovery.js', 'planet-notes-service.js', 'planet-notes-transfer.js', 'planet-notes-pocket.js', 'planet-notes-pocket-bridge.js', 'planet-notes-search.js', 'planet-notes-explorer.js', 'planet-notes-tree.js', 'planet-notes-ui.js']) copy(path.join(root, f), path.join(www, f));
+for (const old of ['app.js', 'planet-notes-tree.js', 'planet-notes-explorer.js']) fs.rmSync(path.join(www, old), { force: true }); // old renderer locations
+for (const f of [...APP_FILES, 'covers.js', 'styles.css', 'i18n.js', 'planet-notes-html.js', 'planet-notes.js', 'planet-notes-reconcile.js', 'planet-notes-history.js', 'planet-notes-recovery.js', 'planet-notes-store.js', 'planet-notes-organization.js', 'planet-notes-recovery-selection.js', 'planet-notes-observer.js', 'planet-notes-organization-resolution.js', 'planet-notes-organization-service.js', 'planet-notes-library-recovery.js', 'planet-notes-service.js', 'planet-notes-transfer.js', 'planet-notes-pocket.js', 'planet-notes-pocket-bridge.js', 'planet-notes-search.js', 'planet-notes-ui.js']) copy(path.join(root, f), path.join(www, f));
 copy(path.join(mods, 'jszip', 'dist', 'jszip.min.js'), path.join(www, 'jszip.min.js'));
 copyDir(path.join(root, 'fonts'), path.join(www, 'fonts'));
 copyDir(path.join(root, 'locales'), path.join(www, 'locales'));

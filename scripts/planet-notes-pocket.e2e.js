@@ -8,6 +8,7 @@ const { createNotesService } = require('../planet-notes-service'); const { creat
 const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'neo-pocket-notes-')));
 app.setPath('userData', path.join(root, 'profile'));
 const repository = path.resolve(__dirname, '..');
+require('./pocket-www.js'); // Standard E2E runner invokes this file directly.
 const deadline = setTimeout(() => { console.error('Pocket timed out; fixture:', root); app.exit(1); }, 90000);
 async function run() {
   const bookId = 'book-pocket'; const directory = path.join(root, 'NEO Library', bookId);

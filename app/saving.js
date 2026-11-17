@@ -1036,6 +1036,7 @@ function wordRanges(p, at) {
 // A chapter (chId) or the whole book (null) as the shown snapshot had it.
 // The book as it stands is snapshotted first, and ⌘Z undoes the restore.
 async function restoreSnapshot(chId) {
+  if (customNotesSessionBook) return deferCustomNotesNavigation(() => restoreSnapshot(chId));
   const shown = snapShown;
   if (!book || !shown) return;
   try {

@@ -4,7 +4,7 @@
 const { app, BrowserWindow } = require('electron'); const assert = require('node:assert/strict');
 const fs = require('node:fs'); const path = require('node:path'); const os = require('node:os'); const { pathToFileURL } = require('node:url');
 const { createStressFixture, profiles } = require('./helpers/planet-notes-stress-fixtures');
-const caseId = process.argv[process.argv.indexOf('--case')+1];
+const caseId = process.argv.includes('--case') ? process.argv[process.argv.indexOf('--case')+1] : 'smoke';
 const definition = [...profiles.full,...profiles.smoke].find(c=>c.id===caseId); if(!definition)throw new Error('Unknown UI stress case');
 const outAt=process.argv.indexOf('--out');const output=outAt>=0?path.resolve(process.argv[outAt+1]):null;
 const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'neo-ui-stress-')));app.setPath('userData',path.join(root,'profile'));
@@ -14,7 +14,7 @@ const repository=path.resolve(__dirname,'..');const deadline=setTimeout(()=>{
   console.error('UI worker timed out:',caseId,root);app.exit(1);
 },120000);
 async function run(){
-  const scripts=['scripts/helpers/planet-notes-ui-verification.js','i18n.js','planet-notes.js','planet-notes-html.js','planet-notes-organization.js','planet-notes-search.js','planet-notes-recovery-selection.js','planet-notes-tree.js','planet-notes-explorer.js'];
+  const scripts=['scripts/helpers/planet-notes-ui-verification.js','i18n.js','planet-notes.js','planet-notes-html.js','planet-notes-organization.js','planet-notes-search.js','planet-notes-recovery-selection.js','app/notes-tree.js','app/notes-explorer.js'];
   const page='<!doctype html><html><head><meta charset="UTF-8"><link rel="stylesheet" href="'+pathToFileURL(path.join(repository,'styles.css')).href+'"></head><body><div id="editor-view" class="notes-tab"><aside id="nav-pane" class="open"><div class="nav-item"><div class="n-row"><span id="reference-font" class="n-label">Existing navigation</span></div></div><div id="notes-nav"></div></aside><div id="aux-editor" contenteditable="true"></div><div id="custom-notes-preview"></div></div>'+scripts.map(file=>'<script src="'+pathToFileURL(path.join(repository,file)).href+'"></script>').join('')+'</body></html>';
   fs.writeFileSync(path.join(root,'index.html'),page);await app.whenReady();
   const win=new BrowserWindow({width:1100,height:850,show:true,webPreferences:{contextIsolation:true,nodeIntegration:false}});const errors=[];
@@ -26,7 +26,7 @@ async function run(){
     let index=fixture.index;let active=null;let dirtyHtml=null;let unavailable=false;const problems=[];
     const api={notesCapabilities:async()=>({enabled:true}),notesLoad:async()=>{if(!unavailable)return {status:'ok',index};const copy=structuredClone(index);copy.notes.push({...index.notes[0],id:'n-cloud-only',title:'Cloud note',parentId:null,labelIds:[]});copy.root.childOrder.push('n-cloud-only');return {status:'ok',index:copy};},notesOrganizationState:async()=>({canUndo:false}),notesRead:async(_book,id)=>unavailable&&id==='n-cloud-only'?{status:'unavailable'}:{status:'ok',html:fixture.bodies[id].html},notesReadLegacy:async()=>({status:'missing'}),notesOrganize:async(_book,request)=>{index=NeoPlanetNotesOrganization.applyAction(index,request,{locale:'en'}).index;return {status:'saved'};}};
     const open=async id=>{active=id;dirtyHtml=null;ed.innerHTML=fixture.bodies[id].html;};
-    const tree=NeoPlanetNotesTree.createNotesTree({api,t,locale:()=> 'en',currentBook:()=> 'book-stress',canManage:()=>true,openNote:open,createNote:async()=>{},flushEditor:async()=>{},removeOpenNote:async()=>{},activeNote:()=>active,titleChanged:()=>{},onError:error=>problems.push(error.message)});
+    const tree=NeoPlanetNotesTree.createNotesTree({keyLetter: e => e.key.toLowerCase(),api,t,locale:()=> 'en',currentBook:()=> 'book-stress',canManage:()=>true,openNote:open,createNote:async()=>{},flushEditor:async()=>{},removeOpenNote:async()=>{},activeNote:()=>active,titleChanged:()=>{},onError:error=>problems.push(error.message)});
     const start=performance.now();await tree.mount(host,'book-stress');const mountMs=performance.now()-start;
     const initialRows=new Map([...tree.root.querySelectorAll('[role="treeitem"]')].map(row=>[row.dataset.itemId,row]));
     const expandedAt=performance.now();

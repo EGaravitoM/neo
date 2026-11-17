@@ -122,6 +122,7 @@ function renderNav() {
     }
 
     item.onclick = () => {
+      if (customNotesSessionBook) return deferCustomNotesNavigation(() => item.onclick());
       switchTab('manuscript');
       if (IS_POCKET) {
         // the top of the chapter, and the pane steps aside for the page
@@ -166,6 +167,7 @@ async function addEntryMenu(at, x, y, from) {
   addEntry(at, kind);
 }
 function addEntry(at, kind) {
+  if (customNotesSessionBook) return deferCustomNotesNavigation(() => addEntry(at, kind));
   switchTab('manuscript');
   snapshotStructure('add ' + kind);
   const chId = newEntryId();
@@ -243,6 +245,7 @@ function storyEnd() {
   return at;
 }
 $('#nav-add').onclick = () => {
+  if (customNotesSessionBook) return deferCustomNotesNavigation(() => $('#nav-add').onclick());
   switchTab('manuscript');
   focusChapter(createChapterAt(storyEnd()));
 };
@@ -451,6 +454,7 @@ if (!NO_HOVER) {
 // share a domain bridge; HTML is inspected before entering the live page.
 let notesExplorer = null;
 let notesRecoveryPreview = null;
+let customNotesNavigation = 0;
 let customNotesTree = null;
 let customNotesController = null;
 let customNotesSessionBook = null;
@@ -630,6 +634,14 @@ async function createCustomNote(title = '', inspector) {
   const controller = await prepareCustomNotes(inspector);
   return controller.create(book.id, title);
 }
+// Existing manuscript actions stay synchronous unless they must first leave
+// a custom note. Wait for composition/capture before restoring their target.
+function deferCustomNotesNavigation(action) {
+  const owner = book; const turn = ++customNotesNavigation;
+  return leaveCustomNotes().then(() => {
+    if (book === owner && turn === customNotesNavigation && currentTab === 'notes') return action();
+  }).catch(customNotesError);
+}
 async function leaveCustomNotes() {
   if (!customNotesSessionBook) return;
   await customNotesController.leave();
@@ -808,7 +820,7 @@ function renderNotesNav() {
 function mountCustomNotesTree(host) {
   if (!book || !window.NeoPlanetNotesTree) return;
   if (!customNotesTree) { customNotesTree = window.NeoPlanetNotesTree.createNotesTree({
-    api: window.neo, t, locale: () => NeoI18n.getLocale(), contextMenu: popMenu,
+    api: window.neo, t, locale: () => NeoI18n.getLocale(), contextMenu: popMenu, keyLetter,
     currentBook: () => book && book.id, canManage: () => featureOn('customNotes'),
     openNote: openCustomNote, createNote: createCustomNote,
     flushEditor: async () => { if (customNotesController) await customNotesController.flush(); },

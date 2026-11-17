@@ -3,7 +3,7 @@
 (function () {
 const domain = globalThis.NeoPlanetNotesOrganization;
 /** Notes-only navigation. All persistence uses domain bridge commands. */
-function createNotesTree({ api, t, locale, currentBook, canManage, openNote, createNote, flushEditor, removeOpenNote, activeNote, titleChanged, contextMenu, onError }) {
+function createNotesTree({ api, t, locale, currentBook, canManage, openNote, createNote, flushEditor, removeOpenNote, activeNote, titleChanged, contextMenu, keyLetter, onError }) {
   const root = document.createElement('section'); root.id = 'custom-notes-nav';
   let treeView = null; const renderedRows = new Map();
   const sessions = new Map(); let bookId = null; let index = null; let selected = null; let generation = 0;
@@ -199,7 +199,7 @@ function createNotesTree({ api, t, locale, currentBook, canManage, openNote, cre
   const keydown = (event, rows, at) => {
     const value = rows[at]; const expanded = state().expanded;
     let target;
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && manage()) { event.preventDefault(); event.stopPropagation(); run({}, true).catch(error); return; }
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && keyLetter(event) === 'z' && manage()) { event.preventDefault(); event.stopPropagation(); run({}, true).catch(error); return; }
     if (event.altKey && ['ArrowUp', 'ArrowDown'].includes(event.key) && manage()) { event.preventDefault(); event.stopPropagation(); selected = value.item.id; reorder(event.key === 'ArrowUp' ? -1 : 1)?.catch(error); return; }
     if (event.key === 'ArrowDown') target = rows[at + 1]?.item.id;
     else if (event.key === 'ArrowUp') target = rows[at - 1]?.item.id;

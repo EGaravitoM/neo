@@ -11,7 +11,7 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
   let list = null; let selectedWords = []; let hydrationTimer = null;
   const resultRows = new WeakMap();
   const cancelHydrationRender = () => { if (hydrationTimer !== null) clearTimeout(hydrationTimer); hydrationTimer = null; };
-  let canRestore = true; let model = null; let metadataUnavailable = false; let busy = false; let loadTask = null; const pending = new Map();
+  let canRestore = true; let model = null; let metadataUnavailable = false; let busy = false; let loadTask = null; let loading = false; const pending = new Map();
   const textOf = (html) => {
     const holder = document.createElement('template'); holder.innerHTML = html;
     holder.content.querySelectorAll('script,style,template,noscript').forEach((n) => n.remove());
@@ -130,7 +130,8 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
   const startSearch = async (background = false) => {
     const book = owner; const turn = generation;
     cancelHydrationRender();
-    model = search.createNotesSearch({ textOf, locale: locale() });
+    const previousModel = model;
+    if (!background || !model) model = search.createNotesSearch({ textOf, locale: locale() });
     let loaded;
     try { loaded = await call('notesLoad', book); }
     catch (err) { if (onError) onError(err); loaded = { status: 'unavailable' }; }
@@ -148,7 +149,9 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
       const groups = organization.pathTo(index, note.parentId);
       tasks.push({ document: { bookId: book, kind: 'custom', noteId: note.id }, title: note.title || t('Untitled'), groupPath: groups.map((g) => g.title).join(' / '), location: groups.map((g) => g.title).join(' / ') || t('Custom Notes'), labelIds: note.labelIds, labels: note.labelIds.map((id) => index.labels.find((l) => l.id === id)?.name).filter(Boolean) });
     }
-    for (const task of tasks) model.upsert({ ...task, status: 'loading' }); renderResults();
+    const previous = background && previousModel ? new Map(previousModel.query().results.map(record => [search.key(record.document), record])) : new Map();
+    model = search.createNotesSearch({ textOf, locale: locale() });
+    for (const task of tasks) model.upsert({ ...(previous.get(search.key(task.document)) || { status: 'loading' }), ...task, refreshing: previous.has(search.key(task.document)) }); renderResults();
     // Small batches permit editor writes to enter the book queue between reads.
     for (let offset = 0; offset < tasks.length; offset += 4) {
       if (!sameOwner(book, turn) || mode !== 'search') return;
@@ -280,18 +283,23 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
       area.append(node('div', undefined, 'notes-recovery-list'), node('div', undefined, 'notes-recovery-actions'));
     }
   };
+  const trackLoad = (task) => {
+    loading = true; loadTask = task;
+    task.finally(() => { if (loadTask === task) loading = false; }).catch(() => {});
+    return task;
+  };
   const setMode = (value) => {
     generation++; navigation++; cancelHydrationRender(); clearHighlights(); mode = value;
     const book = owner; const turn = generation;
     onMode(!!mode); render();
     // settled() must include asynchronous preview closure, not the previous
     // search's completed promise. Abandoned transitions cannot restart loading.
-    loadTask = (async () => {
+    trackLoad((async () => {
       if (!value || value === 'search') await closePreview(true);
       if (!sameOwner(book, turn) || mode !== value) return;
       if (value === 'search') await startSearch();
       else if (value) await loadRecovery();
-    })();
+    })());
     return loadTask;
   };
   return {
@@ -305,7 +313,7 @@ function createNotesExplorer({ api, t, locale, currentBook, catalogLegacy, liveD
     },
     edited() { if (mode === 'search') { renderResults(); highlight(); } },
     navigated() { navigation++; clearHighlights(); },
-    async refresh() { if (!busy && mode === 'search' && !root.contains(document.activeElement)) { generation++; loadTask = startSearch(true); await loadTask; } },
+    async refresh() { if (loading) return loadTask; if (!busy && mode === 'search' && !root.contains(document.activeElement)) { generation++; await trackLoad(startSearch(true)); } },
     detach() { cancelHydrationRender(); owner = null; generation++; navigation++; mode = null; clearHighlights(); root.remove(); onMode(false); },
     isOpen: () => !!mode,
     settled: () => loadTask || Promise.resolve()

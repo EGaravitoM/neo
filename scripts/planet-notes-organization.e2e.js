@@ -75,7 +75,12 @@ async function run() {
   assert.ok(choices.includes(characters));
   await js(`document.querySelector('.custom-notes-form select').value=${JSON.stringify(characters)}`); await click('.custom-notes-form [data-action="move"]');
   await until(() => index().notes[0].parentId === characters);
-  await click('[data-action="undo"]'); await until(() => index().notes[0].parentId === nested);
+  await until(() => js(`document.getElementById('custom-notes-nav').getAttribute('aria-busy')!=='true'`));
+  await js(`(() => {const row=document.querySelector('[data-item-id="${noteId}"]');row.focus();row.dispatchEvent(new KeyboardEvent('keydown',{key:'Z',code:'KeyZ',ctrlKey:true,shiftKey:true,bubbles:true,cancelable:true}));})()`);
+  await tick(); assert.equal(index().notes[0].parentId, characters, 'Redo shortcut must not perform another organization undo');
+  await js(`document.querySelector('[data-item-id="${noteId}"]').dispatchEvent(new KeyboardEvent('keydown',{key:'я',code:'KeyZ',ctrlKey:true,bubbles:true,cancelable:true}))`);
+  await until(() => index().notes[0].parentId === nested);
+
   assert.match(fs.readFileSync(bodyPath, 'utf8'), /Writing to preserve/);
   console.log('PASS: keyboard management and organization undo preserve writing');
   await until(() => js(`document.getElementById('custom-notes-nav').getAttribute('aria-busy')!=='true'`));

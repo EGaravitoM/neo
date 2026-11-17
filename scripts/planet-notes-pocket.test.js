@@ -151,7 +151,7 @@ test('an interrupted Pocket body save replays its prepared command after restart
 test('Pocket shared asset order includes every script before bridge initialization', () => {
   const page = fs.readFileSync(path.join(__dirname, '../pocket/www/index.html'), 'utf8');
   const pack = fs.readFileSync(path.join(__dirname, 'pocket-www.js'), 'utf8');
-  for (const file of ['planet-notes.js', 'planet-notes-history.js', 'planet-notes-recovery.js', 'planet-notes-store.js', 'planet-notes-service.js', 'planet-notes-pocket.js', 'planet-notes-pocket-bridge.js', 'planet-notes-tree.js', 'planet-notes-ui.js', 'planet-notes-explorer.js']) {
+  for (const file of ['planet-notes.js', 'planet-notes-history.js', 'planet-notes-recovery.js', 'planet-notes-store.js', 'planet-notes-service.js', 'planet-notes-pocket.js', 'planet-notes-pocket-bridge.js', 'planet-notes-ui.js']) {
     assert.ok(page.indexOf('src="' + file + '"') >= 0 && page.indexOf('src="' + file + '"') < page.indexOf('src="pocket-bridge.js"'));
     assert.ok(pack.includes("'" + file + "'"));
   }

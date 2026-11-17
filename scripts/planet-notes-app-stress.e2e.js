@@ -3,7 +3,7 @@
 const { app,BrowserWindow }=require('electron');const fs=require('node:fs');const path=require('node:path');const os=require('node:os');const assert=require('node:assert/strict');const {performance}=require('node:perf_hooks');
 const {createStressFixture,profiles}=require('./helpers/planet-notes-stress-fixtures');
 const { assertNoRendererErrors } = require('./helpers/planet-notes-ui-verification');
-const arg=name=>process.argv[process.argv.indexOf(name)+1];const definition=[...profiles.full,...profiles.smoke].find(c=>c.id===arg('--case'));if(!definition)throw new Error('Unknown app stress case');
+const arg=name=>process.argv[process.argv.indexOf(name)+1];const definition=[...profiles.full,...profiles.smoke].find(c=>c.id===(process.argv.includes('--case')?arg('--case'):'smoke'));if(!definition)throw new Error('Unknown app stress case');
 const timeoutMs=process.argv.includes('--timeout-ms')?Number(arg('--timeout-ms')):120000;
 if(!Number.isSafeInteger(timeoutMs)||timeoutMs<1)throw new Error('Invalid app stress timeout');
 const output=process.argv.includes('--out')?path.resolve(arg('--out')):null;const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'neo-app-stress-')));

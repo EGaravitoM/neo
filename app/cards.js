@@ -1039,6 +1039,7 @@ function deleteSectionNote(chId, secId) {
 
 // the card's place in the manuscript
 function goToCard(cell) {
+  if (customNotesSessionBook) return deferCustomNotesNavigation(() => goToCard(cell));
   if (cell.dataset.kind === 'scene') { goToScene(cell); return; }
   const chId = cell.dataset.ch;
   switchTab('manuscript');
@@ -2068,6 +2069,7 @@ function looseToScene(looseId, before) {
 }
 
 function goToScene(cell) {
+  if (customNotesSessionBook) return deferCustomNotesNavigation(() => goToScene(cell));
   const sc = sceneOfCell(cell);
   switchTab('manuscript');
   if (sc) goToSceneHeading(sc.s.p);
@@ -2835,6 +2837,7 @@ async function savedBeforeLettingGo(chId) {
 }
 
 async function restoreDarling(id) {
+  if (customNotesSessionBook) return deferCustomNotesNavigation(() => restoreDarling(id));
   const d = darlings.find((x) => x.id === id);
   if (!d) return;
   snapshotStructure('darling restore');

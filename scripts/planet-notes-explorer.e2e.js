@@ -120,15 +120,15 @@ async function run() {
   // exercising the real explorer DOM, event handlers and search implementation.
   await js(`(async () => {
     const fixtureBook='book-regressions'; const chapter={bookId:fixtureBook,kind:'chapter',chapterId:'ch-first'};
-    let live=[]; let metadataStatus='ok'; let orphanDiscovery; let throwCloud=false; let closePreviewTask=Promise.resolve();let noteReadTask=null;
+    let live=[]; let loads=0; let metadataStatus='ok'; let orphanDiscovery; let throwCloud=false; let closePreviewTask=Promise.resolve();let noteReadTask=null;
     const metadata={schemaVersion:1,versionId:'v-fixture',parentVersionIds:[],root:{sortMode:'alphabetical',childOrder:['n-fixture']},groups:[],notes:[{id:'n-fixture',title:'Mara',parentId:null,labelIds:['l-old'],createdAt:'2026-11-11T10:00:00.000Z'}],labels:[{id:'l-old',name:'plot'}],tombstones:[]};
     const errors=[];const api={
       notesCapabilities:async()=>({enabled:true}),
-      notesLoad:async()=>{if(throwCloud)throw Object.assign(new Error('Cloud unavailable'),{code:'ECLOUD'});return metadataStatus==='ok'?{status:'ok',index:structuredClone(metadata),orphanDiscovery}:{status:metadataStatus};},
+      notesLoad:async()=>{loads++;if(throwCloud)throw Object.assign(new Error('Cloud unavailable'),{code:'ECLOUD'});return metadataStatus==='ok'?{status:'ok',index:structuredClone(metadata),orphanDiscovery}:{status:metadataStatus};},
       notesRead:async()=>noteReadTask||({status:'ok',html:'<p>Orchard</p>'}),
       notesReadLegacy:async(_book,{page})=>page==='book'?{status:'ok',html:'<p>Local legacy reference</p>'}:{status:'missing'}
     };
-    const host=document.createElement('aside');document.body.append(host);
+    const host=document.createElement('aside');const outside=document.createElement('button');document.body.append(host,outside);
     const explorer=NeoPlanetNotesExplorer.createNotesExplorer({api,t:NeoI18n.t,locale:()=> 'en',currentBook:()=>fixtureBook,
       catalogLegacy:()=>[{document:{kind:'book'},title:'The Book'},{document:{kind:'chapter',chapterId:'ch-first'},title:'First chapter'}],
       liveDocuments:()=>live,currentDocument:()=>null,editorRoot:()=>null,openDocument:async()=>{},preview:async()=>{},closePreview:()=>closePreviewTask,flush:async()=>{},dataChanged:async()=>{},onMode:()=>{},onError:error=>errors.push(error)});
@@ -150,9 +150,21 @@ async function run() {
     explorer.root.querySelector('[data-explorer-action="search"]').click();await new Promise(resolve=>setTimeout(resolve,30));
     check(![...explorer.root.querySelectorAll('.notes-search-result .n-label')].some(label=>label.textContent==='Mara'),'Empty All view eagerly rendered pending placeholders');
     check(explorer.root.querySelector('.notes-explorer-status').textContent.includes('incomplete'),'Pending note coverage was hidden');
+    const loadCount=loads;const polling=[];
+    outside.focus();
+    for(let poll=0;poll<3;poll++){polling.push(explorer.refresh());await Promise.resolve();}
+    check(loads===loadCount,'Background polling restarted an in-flight search');
     live=[{document:{bookId:fixtureBook,kind:'custom',noteId:'n-fixture'},html:'<p>Immediate live words</p>'}];explorer.edited();
     check([...explorer.root.querySelectorAll('.notes-search-result .n-label')].some(label=>label.textContent==='Mara'),'Live writing should appear before the body read settles');
-    finishRead({status:'ok',html:'<p>Orchard</p>'});await explorer.settled();noteReadTask=null;live=[];await action('close');
+    finishRead({status:'ok',html:'<p>Orchard</p>'});await explorer.settled();await Promise.all(polling);check(loads===loadCount,'Delayed search did not settle through shared polling');noteReadTask=null;live=[];
+    let finishBackground;noteReadTask=new Promise(resolve=>{finishBackground=resolve;});
+    outside.focus();const background=explorer.refresh();
+    await new Promise(resolve=>setTimeout(resolve,0));query('orchard');
+    check(count()===1,'Background refresh discarded an available result');
+    check(explorer.root.querySelector('.notes-explorer-status').textContent.includes('incomplete'),'Refreshing retained results must disclose pending coverage');
+    finishBackground({status:'ok',html:'<p>Updated orchard</p>'});await background;noteReadTask=null;
+    check(!explorer.root.querySelector('.notes-explorer-status').textContent.includes('incomplete'),'Background hydration never completed');
+    await action('close');
     await action('search');query('dragon');check(count()===0,'Unwritten chapter should not invent a saved match');
     live=[{document:chapter,html:'<p>Unsaved dragon writing</p>'}];explorer.edited();
     check(count()===1,'Missing-file chapter must match live writing after hydration');
@@ -189,7 +201,7 @@ async function run() {
     check(count()===1&&explorer.root.querySelector('.notes-search-result')===retained,'Large result reduction replaced retained identity');
     check(document.activeElement===retained,'Bulk result reduction lost keyboard focus');
     query('nothing_matches_here');check(count()===0,'Empty reduction left stale results');
-    explorer.detach();host.remove();
+    explorer.detach();host.remove();outside.remove();
   })()`);
   console.log('PASS: unsaved first chapter notes, deleted/merged filter cleanup, partial cloud coverage and retry');
   await click('close'); await js(`openCustomNote('${note.noteId}')`);

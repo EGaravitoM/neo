@@ -56,6 +56,19 @@ async function run() {
   await js(`document.getElementById('firstrun').hidden=true; openBook(${JSON.stringify(book.id)})`);
   await js(`openCustomNote(${JSON.stringify(note.noteId)})`);
   assert.equal(await js(`document.getElementById('aux-editor').contentEditable`), 'true');
+  await js('createChapterAt(0)'); await js('createChapterAt(1)');
+  await js("switchTab('manuscript'); focusChapterStart(book.chapterOrder[0]);");
+  await js(`openCustomNote(${JSON.stringify(note.noteId)})`);
+  const nextChapter = await js('book.chapterOrder[1]');
+  await js('gotoChapter(1)');
+  assert.equal(await js('captureCaret().chId'), nextChapter);
+  await js(`openCustomNote(${JSON.stringify(note.noteId)})`);
+  await js("document.getElementById('aux-editor').dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true})); window.pendingChapterNavigation=gotoChapter(-1); void 0;");
+  assert.equal(await js('currentTab'), 'notes');
+  await js("document.getElementById('aux-editor').dispatchEvent(new CompositionEvent('compositionend', {bubbles:true})); pendingChapterNavigation");
+  assert.equal(await js('captureCaret().chId'), await js('book.chapterOrder[0]'));
+  await js(`openCustomNote(${JSON.stringify(note.noteId)})`);
+  console.log('PASS: chapter navigation waits for Custom Notes and composition before restoring its target');
   const attacks = ['<script>window.neoAttack=1</script><p>Words</p>', '<img src=x onerror="window.neoAttack=1">', '<svg onload="window.neoAttack=1"></svg>', '<p style="background:url(https://example.invalid)">Words</p>', '<a href="javascript:alert(1)">Words</a>', '<p data-x="y">Words</p>'];
   for (const html of attacks) {
     const result = await js(`NeoPlanetNotesHtml.inspect(${JSON.stringify(html)})`);

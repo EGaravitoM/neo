@@ -499,6 +499,7 @@ $('#editor-view').addEventListener('mousedown', caretFromEmptyClick);
 // ⌥⌘↓ / ⌥⌘↑ (Ctrl+Alt on Windows and Linux): the start of the next or the
 // previous chapter, without opening the pane
 function gotoChapter(step) {
+  if (customNotesSessionBook) return deferCustomNotesNavigation(() => gotoChapter(step));
   if (!book || $('#editor-view').hidden || !book.chapterOrder.length) return;
   if (document.querySelector('.modal-backdrop:not([hidden])')) return;
   if (currentTab !== 'manuscript') switchTab('manuscript');

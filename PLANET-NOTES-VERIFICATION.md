@@ -333,3 +333,32 @@ collection reads took 160/640/4960 adapter reads after 0/30/300 prior saves.
 These in-memory measurements confirm retained-history read amplification; they
 are not native I/O timings or performance acceptance. Optimization remains open
 alongside NG+ performance review. Ordinary-user feature gates remain unchanged.
+
+## NEO 2.0 standards follow-up
+
+The tree and explorer now live in `app/notes-tree.js` and
+`app/notes-explorer.js`, ordered through `scripts/app-files.js` for desktop,
+Pocket, source-based tests and translation extraction. Shared domain and storage
+modules retain their existing locations. No CSS or font rules changed.
+
+Both stress E2E entry points default to the smoke case when invoked without
+arguments. The Pocket E2E prepares its own generated assets, so the standard
+`npm run test:e2e` runner does not depend on a previous npm script or local build.
+
+Organization undo uses the host's `keyLetter` helper and excludes Shift/Alt.
+Chapter and other manuscript navigation actions defer until leaving Custom Notes
+finishes composition/capture; stale continuations cannot act on another book or
+supersede a later navigation request. Search polling joins in-flight hydration,
+and refresh retains available results while reporting incomplete coverage.
+Regressions cover non-Latin undo, shifted shortcuts, composing chapter navigation,
+repeated search polls, and retained results during a delayed refresh.
+
+The Node suite passes 690 tests. These changes do not resolve the separately
+tracked retained-history read amplification or authorize release; NG+ gates and
+ordinary-user capability gates remain unchanged.
+
+Final standard-runner verification: all eight selected E2E files passed — legacy
+Notes, Options, and Planet Notes editor, organization, explorer, Pocket, app stress
+and UI stress. Stress workers ran without case arguments. The Pocket run prepared
+its assets itself. Targeted lint and diff whitespace checks pass; the pre-existing
+control-character-regex lint finding in `app/screenplay.js` is unchanged.

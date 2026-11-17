@@ -280,6 +280,7 @@ function insertPlaceholder() {
 // Back to the manuscript, caret just past the flag. Scrolls only when the
 // flag isn't already on screen, and from wherever the page is now.
 function returnToMark(sid) {
+  if (customNotesSessionBook) return deferCustomNotesNavigation(() => returnToMark(sid));
   if (currentTab !== 'manuscript') switchTab('manuscript');
   const mark = document.querySelector(`.ph-mark[data-sid="${sid}"]`);
   if (!mark) return;

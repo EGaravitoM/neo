@@ -241,6 +241,7 @@ let tabPlaces = {};
 
 let auxLoad = 0; // which Notes read is the current one
 function switchTab(name) {
+  customNotesNavigation++;
   if (name !== 'notes' && notesExplorer) notesExplorer.navigated();
   if (notesRecoveryPreview) {
     if (name === 'notes' && currentTab === 'notes') { applyBright(); renderNotesNav(); return; }
@@ -248,7 +249,7 @@ function switchTab(name) {
   }
   if (customNotesSessionBook) {
     if (name === 'notes' && currentTab === 'notes') { applyBright(); renderNotesNav(); return; }
-    return leaveCustomNotes().then(() => switchTab(name));
+    return deferCustomNotesNavigation(() => switchTab(name));
   }
   closeCardEditor();
   closeFootnote();
