@@ -1367,6 +1367,7 @@ async function duplicateBook(meta) {
   }
   let copy;
   try {
+    if (customNotesController) await customNotesController.flush();
     copy = await window.neo.duplicateBook(meta.id, t('{title} (copy)', { title: meta.title }));
   } catch (err) {
     window.neo.logError('duplicate: ' + (err && err.stack || err));

@@ -264,6 +264,7 @@ function alignedProseHtml(html, value) {
   return changed ? captureBody(holder) : null;
 }
 function alignBookProse(value) {
+  if (customNotesSessionBook) return deferCustomNotesNavigation(() => alignBookProse(value));
   if (!featureOn('formatting') || !book || isScript() || !['left', 'center', 'right', 'justify'].includes(value)) return 0;
   const changes = [];
   for (const chId of book.chapterOrder) {

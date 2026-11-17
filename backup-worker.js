@@ -71,17 +71,22 @@ async function backup({ libraryDir, target, keep, fileLimitMs = FILE_LIMIT_MS })
     let names = [];
     try { names = await fsp.readdir(dir); } catch (err) { missed.push(`${rel || '.'} (${err.code || err.message})`); return; }
     for (const name of names) {
+      if (rel === '' && /^\.book-.+\.icloud$/.test(name)) { missed.push(`${name} (in iCloud, not on this Mac)`); continue; }
       if (rel === '' && (name === 'Backups' || name === 'Exports')) continue;
       // only NEO's own things: a library kept in a busy folder (Dropbox,
       // Documents) doesn't zip everything else in there every day
       if (rel === '' && !(name.startsWith('book-') || name.startsWith('library.json') || name === '_catalog.txt')) continue;
       // a book's snapshots stay out: they're a history of their own
       if (name === 'snapshots' && rel.startsWith('book-') && !rel.includes('/')) continue;
-      if (name === '.DS_Store' || /^\..+\.icloud$/.test(name)) continue; // Finder litter; iCloud's stand-in for a file
+      const inNotes = /^book-[^/]+\/notes(?:\/|$)/.test(rel ? rel + '/' + name : name);
+      const notesFolderPlaceholder = /^book-[^/]+$/.test(rel) && /^\.?notes\.icloud$/.test(name);
+      if ((inNotes || notesFolderPlaceholder) && name.endsWith('.icloud')) { missed.push(`${rel}/${name} (in iCloud, not on this Mac)`); continue; }
+      if (!inNotes && (name === '.DS_Store' || /^\..+\.icloud$/.test(name))) continue;
       const full = path.join(dir, name);
       const relPath = rel ? rel + '/' + name : name;
       try {
-        const st = await fsp.stat(full);
+        const st = inNotes ? await fsp.lstat(full) : await fsp.stat(full);
+        if (inNotes && (!st.isFile() && !st.isDirectory() || st.isSymbolicLink())) { missed.push(`${relPath} (not a regular notes file or directory)`); continue; }
         if (st.isDirectory()) await walk(full, relPath);
         else if (st.isFile() || st.isFIFO()) files.push([full, relPath, (process.platform === 'darwin' || SPARSE_IS_CLOUD) && st.size > 0 && st.blocks === 0]);
       } catch (err) {

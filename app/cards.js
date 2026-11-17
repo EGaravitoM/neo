@@ -1039,6 +1039,7 @@ function deleteSectionNote(chId, secId) {
 
 // the card's place in the manuscript
 function goToCard(cell) {
+  if (customNotesSessionBook) return deferCustomNotesNavigation(() => goToCard(cell));
   if (cell.dataset.kind === 'scene') { goToScene(cell); return; }
   const chId = cell.dataset.ch;
   switchTab('manuscript');
@@ -2068,6 +2069,7 @@ function looseToScene(looseId, before) {
 }
 
 function goToScene(cell) {
+  if (customNotesSessionBook) return deferCustomNotesNavigation(() => goToScene(cell));
   const sc = sceneOfCell(cell);
   switchTab('manuscript');
   if (sc) goToSceneHeading(sc.s.p);
@@ -2625,10 +2627,27 @@ window.addEventListener('resize', queueWalkNote);
 
 let auxDirty = false;
 $('#aux-editor').addEventListener('keydown', (e) => { if (styleKeepScroll(e)) return; smartKeys(e, e.currentTarget); });
+$('#aux-editor').addEventListener('compositionstart', () => {
+  if ($('#aux-editor').dataset.customNoteId && customNotesController) {
+    customNotesComposing = true; customNotesController.setComposing(true);
+  }
+});
+$('#aux-editor').addEventListener('compositionend', () => {
+  if (customNotesComposing && customNotesController) {
+    customNotesComposing = false; customNotesController.setComposing(false);
+  }
+});
 $('#aux-editor').addEventListener('input', () => {
+  if ($('#aux-editor').dataset.customNoteId) {
+    customNotesLastInput = Date.now();
+    if (customNotesController && !customNotesFrozen) customNotesController.edit($('#aux-editor').innerHTML);
+    if (notesExplorer) notesExplorer.edited();
+    return;
+  }
   auxDirty = true;
   scheduleAuxSave();
   notesTyped();
+  if (notesExplorer) notesExplorer.edited();
   if (spellOn) {
     const key = 'aux-' + ($('#aux-editor').dataset.kind || 'notes');
     scheduleSpellRescan(key, $('#aux-editor'));
@@ -2639,8 +2658,12 @@ $('#aux-editor').addEventListener('paste', (e) => {
   e.preventDefault();
   const html = e.clipboardData.getData('text/html');
   const text = e.clipboardData.getData('text/plain');
-  if (html) document.execCommand('insertHTML', false, cleanPasteHtml(html));
-  else if (text) document.execCommand('insertText', false, text.replace(/\r/g, ''));
+  if (html) {
+    const cleaned = cleanPasteHtml(html);
+    const pasted = $('#aux-editor').dataset.customNoteId
+      ? window.NeoPlanetNotesHtml.fromPaste(cleaned) : cleaned;
+    document.execCommand('insertHTML', false, pasted);
+  } else if (text) document.execCommand('insertText', false, text.replace(/\r/g, ''));
 });
 function scheduleAuxSave() {
   clearTimeout(saveTimers.aux);
@@ -2670,6 +2693,10 @@ function auxRead(bookId, kind) {
 }
 function flushAux() {
   const ed = $('#aux-editor');
+  if (ed.dataset.customNoteId && customNotesController) {
+    if (!customNotesComposing && !customNotesFrozen && ed.contentEditable === 'true') customNotesController.edit(ed.innerHTML);
+    customNotesController.flush().catch(customNotesError);
+  }
   if (auxDirty && ed.dataset.kind && ed.dataset.book) {
     const key = ed.dataset.book + '/' + ed.dataset.kind;
     auxPending[key] = { bookId: ed.dataset.book, kind: ed.dataset.kind, html: ed.innerHTML, inFlight: false };
@@ -2810,6 +2837,7 @@ async function savedBeforeLettingGo(chId) {
 }
 
 async function restoreDarling(id) {
+  if (customNotesSessionBook) return deferCustomNotesNavigation(() => restoreDarling(id));
   const d = darlings.find((x) => x.id === id);
   if (!d) return;
   snapshotStructure('darling restore');

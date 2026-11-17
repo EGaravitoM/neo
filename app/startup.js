@@ -159,6 +159,7 @@ $('#paper-scroll').addEventListener('focusout', (e) => {
   if (sel.rangeCount && e.target.isContentEditable) pagePlace = { el: e.target, range: sel.getRangeAt(0).cloneRange() };
 });
 function focusPage() {
+  if (notesRecoveryPreview && $('#custom-notes-preview')) { $('#custom-notes-preview').focus(); return; }
   if (pagePlace && pagePlace.el.isConnected && !pagePlace.el.closest('[hidden]')) {
     pagePlace.el.focus({ preventScroll: true });
     const sel = window.getSelection();
@@ -230,6 +231,8 @@ document.addEventListener('keydown', (e) => {
     REGIONS[(here + (e.shiftKey ? REGIONS.length - 1 : 1)) % REGIONS.length].enter();
     return;
   }
+  // Let the Notes inline form cancel first; the next Esc returns to writing.
+  if (e.key === 'Escape' && e.target.closest?.('.custom-notes-form')) return;
   // Esc from a pane or the bottom bar: back to the words, not to the shelf
   if (e.key === 'Escape' && !e.isComposing && here > 0 && $('#searchbar').hidden) {
     e.preventDefault();

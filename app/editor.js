@@ -6,6 +6,8 @@
 
 let openGeneration = 0;
 async function openBook(bookId) {
+  if (notesExplorer) notesExplorer.detach(); clearNotesRecoveryPreview();
+  await leaveCustomNotes();
   // a book being exported from the shelf finishes first (it borrows the
   // open book's place for the moment it takes)
   while (shelfExport) await new Promise((r) => setTimeout(r, 50));

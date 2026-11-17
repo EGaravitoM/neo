@@ -419,6 +419,7 @@ async function saveMeta(again) {
 }
 
 function flushAllSaves(e) {
+  if (typeof customNotesController !== 'undefined' && customNotesController && customNotesController.hasPending()) customNotesController.flush().catch(customNotesError);
   if (!book || shelfExport) return;
   // remember where you were, for next session and for the other device:
   // the chapter, the paragraph and the letter (the same place on any
@@ -1035,6 +1036,7 @@ function wordRanges(p, at) {
 // A chapter (chId) or the whole book (null) as the shown snapshot had it.
 // The book as it stands is snapshotted first, and ⌘Z undoes the restore.
 async function restoreSnapshot(chId) {
+  if (customNotesSessionBook) return deferCustomNotesNavigation(() => restoreSnapshot(chId));
   const shown = snapShown;
   if (!book || !shown) return;
   try {
@@ -1418,9 +1420,11 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('beforeunload', flushAllSaves);
 // flush whenever focus leaves NEO, and every 20 seconds
 window.addEventListener('blur', () => { if (book) flushAllSaves(); });
-setInterval(() => { if (book) flushAllSaves('tick'); }, 20000);
+setInterval(() => { if (book || (customNotesController && customNotesController.hasPending())) flushAllSaves('tick'); }, 20000);
 
 async function backToShelf() {
+  if (notesExplorer) notesExplorer.detach(); clearNotesRecoveryPreview();
+  await leaveCustomNotes();
   if (reading) stopReadAloud(false);
   flushAllSaves();
   tabPlaces = {};

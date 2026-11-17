@@ -15,6 +15,12 @@
 // showed, so nothing appears or goes away on the first launch of 2.0. One
 // older still, from before the switch, is judged by what it uses.
 async function setupFeatures() {
+  // The release gate remains authoritative. Only enabled desktop profiles offer
+  // organization; existing notes stay accessible when this option is off.
+  const notes = window.neo.notesCapabilities ? await window.neo.notesCapabilities() : null;
+  if (notes?.enabled && notes.canManage !== false && !FEATURES.some(f => f.key === 'customNotes')) {
+    FEATURES.push({ key: 'customNotes', label: tk('Custom Notes'), desc: tk('Create and organize book-local notes, groups and labels.'), pocket: false });
+  }
   if (library.features && typeof library.features === 'object') { reportFeatures(); return; }
   let more = typeof library.moreFeatures === 'boolean' ? library.moreFeatures : false;
   if (typeof library.moreFeatures !== 'boolean' && library.firstRunDone) more = await usedMoreFeatures();

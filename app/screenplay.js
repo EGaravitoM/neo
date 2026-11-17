@@ -1111,6 +1111,7 @@ function renderScriptNav() {
       if (ind) ind.remove();
     });
     item.onclick = () => {
+      if (customNotesSessionBook) return deferCustomNotesNavigation(() => item.onclick());
       switchTab('manuscript');
       const p = s.p;
       if (!p.isConnected) return;
